@@ -1,7 +1,7 @@
 """Independent proof verifier. No database access is used here."""
 
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from .crypto import digest, verify_payload
 from .ledger import GENESIS_HASH
@@ -32,7 +32,7 @@ def _valid_acceptance_receipt(receipt: object, issuer_public_key: str) -> bool:
         return (
             type(receipt["seq"]) is int and receipt["seq"] > 0
             and type(receipt["prev_hash"]) is str
-            and datetime.fromisoformat(receipt["created_at"]).tzinfo is not None
+            and datetime.fromisoformat(receipt["created_at"]).utcoffset() == timedelta(0)
             and digest(signed) == receipt["entry_hash"]
             and verify_payload(issuer_public_key, unsigned, receipt["signature"])
             and verify_payload(request["agent_key"], request, receipt["body"]["agent_signature"])
@@ -77,7 +77,7 @@ def verify_proof(
             signed = {**unsigned, "signature": entry["signature"]}
             if type(entry["seq"]) is not int or entry["seq"] != index or entry["prev_hash"] != prev:
                 problems.append("BROKEN_CHAIN")
-            if datetime.fromisoformat(entry["created_at"]).tzinfo is None:
+            if datetime.fromisoformat(entry["created_at"]).utcoffset() != timedelta(0):
                 problems.append("INVALID_ENTRY_TIMESTAMP")
             if digest(signed) != entry["entry_hash"]:
                 problems.append("INVALID_ENTRY_HASH")

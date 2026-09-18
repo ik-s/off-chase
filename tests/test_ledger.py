@@ -3,7 +3,7 @@ from datetime import datetime
 
 import pytest
 
-from trust404.crypto import generate_private_key, public_key_b64, sign_payload
+from trust404.crypto import digest, generate_private_key, public_key_b64, sign_payload
 from trust404.ledger import Ledger
 from trust404.verify import checkpoint_digest, verify_proof
 
@@ -123,6 +123,20 @@ def test_modified_entry_timestamp_is_detected(setup):
     proof, issuer_key, pin = issue_proof(setup)
     proof["entries"][1]["created_at"] = "1999-01-01T00:00:00+00:00"
     assert not check(proof, issuer_key, pin).ok
+
+
+def test_signed_non_utc_entry_timestamp_is_rejected(setup):
+    issuer, _, _, _, _, _, _, _ = setup
+    proof, issuer_key, _ = issue_proof(setup, decide=False)
+    entry = proof["entries"][0]
+    entry["created_at"] = "2026-09-18T21:00:00+09:00"
+    unsigned = {key: entry[key] for key in ("seq", "kind", "body", "prev_hash", "created_at")}
+    entry["signature"] = sign_payload(issuer, unsigned)
+    entry["entry_hash"] = digest({**unsigned, "signature": entry["signature"]})
+    checkpoint_body = {"size": 1, "head_hash": entry["entry_hash"]}
+    proof["checkpoint"] = {**checkpoint_body, "signature": sign_payload(issuer, checkpoint_body)}
+    result = check(proof, issuer_key, checkpoint_digest(proof["checkpoint"]))
+    assert "INVALID_ENTRY_TIMESTAMP" in result.problems
 
 
 def test_malformed_signature_returns_invalid_instead_of_crashing(setup):
