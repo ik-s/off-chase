@@ -1,4 +1,5 @@
 import copy
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 
 import pytest
@@ -87,6 +88,19 @@ def test_repeated_request_and_decision_are_rejected(setup):
     ledger.decide(request["request_id"], policy, policy_signature)
     with pytest.raises(ValueError, match="already decided"):
         ledger.decide(request["request_id"], policy, policy_signature)
+
+
+def test_concurrent_requests_keep_one_ordered_verifiable_log(setup):
+    issuer, agent, ledger, template, _, policy, _, policy_signature = setup
+    requests = [{**template, "request_id": f"parallel-{number}"} for number in range(12)]
+    with ThreadPoolExecutor(max_workers=6) as pool:
+        list(pool.map(lambda request: ledger.accept(request, sign_payload(agent, request)), requests))
+        list(pool.map(lambda request: ledger.decide(request["request_id"], policy, policy_signature), requests))
+
+    proof = ledger.export_proof()
+    assert len(proof["entries"]) == 24
+    assert [entry["seq"] for entry in proof["entries"]] == list(range(1, 25))
+    assert check(proof, public_key_b64(issuer), checkpoint_digest(proof["checkpoint"])).ok
 
 
 def test_bad_agent_signature_is_rejected(setup):

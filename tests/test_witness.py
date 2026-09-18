@@ -1,4 +1,5 @@
 import copy
+from concurrent.futures import ThreadPoolExecutor
 
 import pytest
 
@@ -38,6 +39,23 @@ def test_witness_signs_checkpoint_and_append_only_extension(tmp_path):
     assert verify_witness_receipt(second_proof, second_receipt, public_key_b64(issuer), public_key_b64(witness_key))
     assert second_receipt["witness_seq"] == 2
     assert second_receipt["previous_receipt_hash"] == first_receipt["receipt_hash"]
+
+
+def test_concurrent_identical_anchors_share_one_receipt(tmp_path):
+    issuer = generate_private_key()
+    agent = generate_private_key()
+    enterprise = generate_private_key()
+    ledger = Ledger(tmp_path / "ledger.db", issuer)
+    request = make_request(agent, enterprise, "first")
+    ledger.accept(request, sign_payload(agent, request))
+    proof = ledger.export_proof()
+    witness = Witness(tmp_path / "witness.db", generate_private_key())
+
+    with ThreadPoolExecutor(max_workers=6) as pool:
+        receipts = list(pool.map(lambda _: witness.anchor(proof, public_key_b64(issuer)), range(12)))
+
+    assert len({receipt["receipt_hash"] for receipt in receipts}) == 1
+    assert witness.history(public_key_b64(issuer)) == [receipts[0]]
 
 
 def test_witness_rejects_rewritten_prefix(tmp_path):

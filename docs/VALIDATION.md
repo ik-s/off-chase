@@ -4,7 +4,7 @@
 
 | 명령 | 결과 |
 | --- | --- |
-| `.venv/bin/python -m pytest -q` | 49개 통과. 설치된 FastAPI/Starlette 테스트 클라이언트에서 나온 deprecation 경고 2개 |
+| `.venv/bin/python -m pytest -q` | 51개 통과. 동시 접수·결정과 동일 체크포인트 동시 앵커 테스트 포함. 설치된 FastAPI/Starlette 테스트 클라이언트에서 나온 deprecation 경고 2개 |
 | `.venv/bin/ruff check src scripts tests` | 통과 |
 | `.venv/bin/python -m pip check` | 의존성 충돌 없음 |
 | `.venv/bin/trust404 benchmark --requests 1000` | 요청 1000건, 로그 2000항목, 증명 1,470,144바이트, 생성 2.36초, 검증 1.00초, 네 기본 공격 4/4 탐지 |
