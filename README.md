@@ -2,7 +2,7 @@
 
 에이전트가 제출한 결제 요청을 **접수**한 시점과 정책 엔진이 **승인 또는 거절**한 시점을 각각 서명해 순서대로 기록합니다. 검증기는 운영자 데이터베이스에 접속하지 않고 `proof.json`, 신뢰하는 공개키, 외부에서 확보한 체크포인트 지문 또는 witness 영수증만으로 기록을 검사합니다.
 
-현재 구현은 해커톤용 백엔드 MVP입니다. 실제 결제, 블록체인 전송, 프로덕션 키 관리, 공개 블록체인 앵커는 포함하지 않습니다. 서명과 해시의 정확한 범위는 [프로토콜 설명](docs/PROTOCOL.md)에 적었습니다.
+현재 구현은 해커톤용 백엔드 MVP입니다. 실제 결제, 블록체인 전송, 프로덕션 키 관리, 공개 블록체인 앵커는 포함하지 않습니다. 서명과 해시의 정확한 범위는 [프로토콜 설명](docs/PROTOCOL.md), 공격자 가정과 보장 범위는 [위협 모델](docs/THREAT_MODEL.md)에 적었습니다.
 
 ## 빠른 실행
 
@@ -12,6 +12,7 @@ Python 3.11 이상이 필요합니다.
 python3 -m venv .venv
 .venv/bin/python -m pip install -e '.[test]'
 .venv/bin/trust404 demo --out /tmp/trust404-demo
+.venv/bin/python scripts/attack_report.py --demo-dir /tmp/trust404-demo
 ```
 
 정상 증명과 다섯 가지 공격 파일이 생성됩니다. `issuer.pub`은 발행자 공개키이고 `checkpoint.pin`은 체크포인트 SHA-256 지문입니다.
@@ -37,6 +38,8 @@ PIN="$(cat /tmp/trust404-demo/checkpoint.pin)"
 `missing-decision.json`에는 별도 체크포인트가 있으므로 `missing-decision.pin`을 사용합니다. 이 예제의 `.pin` 파일은 같은 컴퓨터에서 만든 것입니다. 실제 독립 앵커가 되려면 결제 운영자가 통제하지 않는 채널에서 지문을 확보해야 합니다.
 
 `rewritten-history.json`은 `rewritten-history.pin`만 사용하면 암호학적으로 유효한 빈 로그입니다. 이 경우에도 별도로 받은 `acceptance-receipt.json`을 `--acceptance`로 넣으면 `ACCEPTANCE_OMITTED`가, 기존 `witness-receipt.json`을 넣으면 `INVALID_WITNESS_RECEIPT`가 나옵니다. 이 사례는 외부에 보관한 증거가 왜 필요한지 보여줍니다.
+
+전체 공격 결과와 컨테이너 실험 기록은 [검증 결과](docs/VALIDATION.md)에 정리했습니다.
 
 ## 별도 witness로 체크포인트 서명
 
