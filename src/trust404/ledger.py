@@ -2,6 +2,7 @@
 
 import json
 import sqlite3
+from datetime import UTC, datetime
 from pathlib import Path
 
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
@@ -44,7 +45,13 @@ class Ledger:
     def _append(self, db: sqlite3.Connection, kind: str, request_id: str, body: dict) -> dict:
         last = db.execute("SELECT seq, entry_hash FROM entries ORDER BY seq DESC LIMIT 1").fetchone()
         seq = last[0] + 1 if last else 1
-        unsigned = {"seq": seq, "kind": kind, "body": body, "prev_hash": last[1] if last else GENESIS_HASH}
+        unsigned = {
+            "seq": seq,
+            "kind": kind,
+            "body": body,
+            "prev_hash": last[1] if last else GENESIS_HASH,
+            "created_at": datetime.now(UTC).isoformat(timespec="microseconds"),
+        }
         entry = {**unsigned, "signature": sign_payload(self.issuer_key, unsigned)}
         entry["entry_hash"] = digest(entry)
         db.execute(

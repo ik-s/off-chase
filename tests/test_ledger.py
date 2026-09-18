@@ -1,4 +1,5 @@
 import copy
+from datetime import datetime
 
 import pytest
 
@@ -46,6 +47,8 @@ def test_rejected_decision_verifies_without_database(setup):
     assert result.missing_requests == []
     assert proof["entries"][1]["body"]["result"] == "REJECTED"
     assert proof["entries"][1]["body"]["reason"] == "AMOUNT_LIMIT"
+    assert datetime.fromisoformat(proof["entries"][0]["created_at"]).tzinfo is not None
+    assert datetime.fromisoformat(proof["entries"][1]["created_at"]).tzinfo is not None
 
 
 def test_changed_rejection_reason_is_detected(setup):
@@ -113,6 +116,12 @@ def test_modified_agent_request_is_detected(setup):
     proof, issuer_key, pin = issue_proof(setup)
     proof = copy.deepcopy(proof)
     proof["entries"][0]["body"]["request"]["amount_minor"] = 500
+    assert not check(proof, issuer_key, pin).ok
+
+
+def test_modified_entry_timestamp_is_detected(setup):
+    proof, issuer_key, pin = issue_proof(setup)
+    proof["entries"][1]["created_at"] = "1999-01-01T00:00:00+00:00"
     assert not check(proof, issuer_key, pin).ok
 
 

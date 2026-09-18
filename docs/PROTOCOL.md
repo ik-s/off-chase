@@ -22,12 +22,13 @@ The first entry has sequence 1 and `prev_hash` of 64 zeroes. Each later entry po
   "kind": "ACCEPT",
   "body": {"request": {}, "agent_signature": "..."},
   "prev_hash": "0000...",
+  "created_at": "2026-09-18T12:00:00.000000+00:00",
   "signature": "...",
   "entry_hash": "..."
 }
 ```
 
-The issuer signs `{seq, kind, body, prev_hash}`. `entry_hash` is SHA-256 of that object plus `signature`. A `DECISION` body has `request_id`, `accept_hash`, `policy`, `policy_hash`, `policy_signature`, `result`, and `reason`. `accept_hash` equals the corresponding acceptance entry hash. `policy_hash` is SHA-256 of the policy object.
+The issuer signs `{seq, kind, body, prev_hash, created_at}`. `created_at` is the issuer's UTC clock claim; an independent witness timestamp provides an external upper bound. `entry_hash` is SHA-256 of that object plus `signature`. A `DECISION` body has `request_id`, `accept_hash`, `policy`, `policy_hash`, `policy_signature`, `result`, and `reason`. `accept_hash` equals the corresponding acceptance entry hash. `policy_hash` is SHA-256 of the policy object.
 
 The issuer signs a checkpoint `{size, head_hash}`; the checkpoint object adds `signature`. The external pin is SHA-256 of the complete signed checkpoint. A `proof.json` contains `{format: "trust404-proof-v1", entries: [...], checkpoint: {...}}`. Every entry up to the checkpoint is included, so proof size and verification work grow linearly with log size.
 

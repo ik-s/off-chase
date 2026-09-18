@@ -1,6 +1,7 @@
 """Independent proof verifier. No database access is used here."""
 
 from dataclasses import dataclass
+from datetime import datetime
 
 from .crypto import digest, verify_payload
 from .ledger import GENESIS_HASH
@@ -19,18 +20,19 @@ def checkpoint_digest(checkpoint: dict) -> str:
 
 
 def _valid_acceptance_receipt(receipt: object, issuer_public_key: str) -> bool:
-    if type(receipt) is not dict or set(receipt) != {"seq", "kind", "body", "prev_hash", "signature", "entry_hash"}:
+    if type(receipt) is not dict or set(receipt) != {"seq", "kind", "body", "prev_hash", "created_at", "signature", "entry_hash"}:
         return False
     if receipt["kind"] != "ACCEPT" or type(receipt["body"]) is not dict or set(receipt["body"]) != {"request", "agent_signature"}:
         return False
     try:
         request = receipt["body"]["request"]
         validate_request(request)
-        unsigned = {key: receipt[key] for key in ("seq", "kind", "body", "prev_hash")}
+        unsigned = {key: receipt[key] for key in ("seq", "kind", "body", "prev_hash", "created_at")}
         signed = {**unsigned, "signature": receipt["signature"]}
         return (
             type(receipt["seq"]) is int and receipt["seq"] > 0
             and type(receipt["prev_hash"]) is str
+            and datetime.fromisoformat(receipt["created_at"]).tzinfo is not None
             and digest(signed) == receipt["entry_hash"]
             and verify_payload(issuer_public_key, unsigned, receipt["signature"])
             and verify_payload(request["agent_key"], request, receipt["body"]["agent_signature"])
@@ -67,14 +69,16 @@ def verify_proof(
     accepted: dict[str, tuple[dict, str]] = {}
     decided: set[str] = set()
     for index, entry in enumerate(entries, start=1):
-        if type(entry) is not dict or set(entry) != {"seq", "kind", "body", "prev_hash", "signature", "entry_hash"}:
+        if type(entry) is not dict or set(entry) != {"seq", "kind", "body", "prev_hash", "created_at", "signature", "entry_hash"}:
             problems.append("INVALID_ENTRY_FORMAT")
             continue
         try:
-            unsigned = {key: entry[key] for key in ("seq", "kind", "body", "prev_hash")}
+            unsigned = {key: entry[key] for key in ("seq", "kind", "body", "prev_hash", "created_at")}
             signed = {**unsigned, "signature": entry["signature"]}
             if type(entry["seq"]) is not int or entry["seq"] != index or entry["prev_hash"] != prev:
                 problems.append("BROKEN_CHAIN")
+            if datetime.fromisoformat(entry["created_at"]).tzinfo is None:
+                problems.append("INVALID_ENTRY_TIMESTAMP")
             if digest(signed) != entry["entry_hash"]:
                 problems.append("INVALID_ENTRY_HASH")
             if not verify_payload(issuer_public_key, unsigned, entry["signature"]):
