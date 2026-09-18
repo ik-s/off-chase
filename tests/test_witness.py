@@ -57,6 +57,22 @@ def test_witness_rejects_rewritten_prefix(tmp_path):
         witness.anchor(alternate.export_proof(), public_key_b64(issuer))
 
 
+def test_witness_rejects_rollback_to_older_valid_checkpoint(tmp_path):
+    issuer = generate_private_key()
+    agent = generate_private_key()
+    enterprise = generate_private_key()
+    ledger = Ledger(tmp_path / "ledger.db", issuer)
+    witness = Witness(tmp_path / "witness.db", generate_private_key())
+    request = make_request(agent, enterprise, "first")
+    ledger.accept(request, sign_payload(agent, request))
+    old_proof = ledger.export_proof()
+    policy = {"version": "v1", "max_amount_minor": 500, "currency": "USD"}
+    ledger.decide("first", policy, sign_payload(enterprise, policy))
+    witness.anchor(ledger.export_proof(), public_key_b64(issuer))
+    with pytest.raises(ValueError, match="rollback"):
+        witness.anchor(old_proof, public_key_b64(issuer))
+
+
 def test_modified_witness_receipt_fails_signature_check(tmp_path):
     issuer = generate_private_key()
     agent = generate_private_key()
