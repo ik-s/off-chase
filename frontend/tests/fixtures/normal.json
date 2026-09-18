@@ -1,0 +1,55 @@
+{
+  "schema_version": 1,
+  "policy": {
+    "schema_version": 1,
+    "policy_id": "payment-limit-v1",
+    "version": 1,
+    "asset": "USDC",
+    "max_amount_base_units": "4000000000",
+    "valid_from": "2026-09-19T00:00:00Z",
+    "enterprise_key_id": "enterprise-key-1",
+    "enterprise_signature": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+  },
+  "request": {
+    "schema_version": 1,
+    "request_id": "REQ-001",
+    "created_at": "2026-09-19T01:00:00.000Z",
+    "asset": "USDC",
+    "amount_base_units": "4500000000",
+    "recipient": "0x1111111111111111111111111111111111111111",
+    "policy_id": "payment-limit-v1",
+    "policy_hash": "0x2222222222222222222222222222222222222222222222222222222222222222",
+    "nonce": "0x3333333333333333333333333333333333333333333333333333333333333333",
+    "agent_key_id": "agent-key-1",
+    "agent_signature": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+  },
+  "verification_receipt": {
+    "schema_version": 1,
+    "request_id": "REQ-001",
+    "request_hash": "0x4444444444444444444444444444444444444444444444444444444444444444",
+    "policy_hash": "0x2222222222222222222222222222222222222222222222222222222222222222",
+    "request_anchor_tx": "0x5555555555555555555555555555555555555555555555555555555555555555",
+    "request_anchor_block": 12345678,
+    "observed_at": 1789779600,
+    "decision_deadline": 1789779630,
+    "verification_key_id": "verification-key-1",
+    "verification_signature": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+  },
+  "decision": {
+    "schema_version": 1,
+    "request_id": "REQ-001",
+    "request_hash": "0x4444444444444444444444444444444444444444444444444444444444444444",
+    "policy_id": "payment-limit-v1",
+    "policy_hash": "0x2222222222222222222222222222222222222222222222222222222222222222",
+    "decision": "REJECT",
+    "reason_code": "LIMIT_EXCEEDED",
+    "institution_key_id": "institution-key-1",
+    "institution_signature": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+  },
+  "anchors": {
+    "chain_id": 11155111,
+    "contract_address": "0x6666666666666666666666666666666666666666",
+    "request_tx": "0x5555555555555555555555555555555555555555555555555555555555555555",
+    "decision_tx": "0x7777777777777777777777777777777777777777777777777777777777777777"
+  }
+}
