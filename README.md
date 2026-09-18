@@ -14,7 +14,7 @@ python3 -m venv .venv
 .venv/bin/trust404 demo --out /tmp/trust404-demo
 ```
 
-정상 증명과 네 가지 공격 파일이 생성됩니다. `issuer.pub`은 발행자 공개키이고 `checkpoint.pin`은 체크포인트 SHA-256 지문입니다.
+정상 증명과 다섯 가지 공격 파일이 생성됩니다. `issuer.pub`은 발행자 공개키이고 `checkpoint.pin`은 체크포인트 SHA-256 지문입니다.
 
 ```bash
 ISSUER_KEY="$(cat /tmp/trust404-demo/issuer.pub)"
@@ -32,8 +32,11 @@ PIN="$(cat /tmp/trust404-demo/checkpoint.pin)"
 | `tampered-policy.json` | 정책 한도 변경 |
 | `deleted-decision.json` | 결정 항목 삭제 |
 | `missing-decision.json` | 접수된 요청의 결정 누락 |
+| `rewritten-history.json` | 운영자가 발행자 키로 빈 로그와 새 체크포인트를 다시 서명해 접수 기록까지 삭제 |
 
 `missing-decision.json`에는 별도 체크포인트가 있으므로 `missing-decision.pin`을 사용합니다. 이 예제의 `.pin` 파일은 같은 컴퓨터에서 만든 것입니다. 실제 독립 앵커가 되려면 결제 운영자가 통제하지 않는 채널에서 지문을 확보해야 합니다.
+
+`rewritten-history.json`은 `rewritten-history.pin`만 사용하면 암호학적으로 유효한 빈 로그입니다. 이 경우에도 별도로 받은 `acceptance-receipt.json`을 `--acceptance`로 넣으면 `ACCEPTANCE_OMITTED`가, 기존 `witness-receipt.json`을 넣으면 `INVALID_WITNESS_RECEIPT`가 나옵니다. 이 사례는 외부에 보관한 증거가 왜 필요한지 보여줍니다.
 
 ## 별도 witness로 체크포인트 서명
 
@@ -54,6 +57,33 @@ witness는 **별도 키와 별도 SQLite DB**를 가지고 이전에 서명한 �
 ```
 
 검증자는 witness 공개키를 별도 신뢰 경로로 받아야 합니다. 데모가 같은 프로세스에서 만든 witness 키는 독립 운영을 증명하지 않습니다. witness 자체가 악의적으로 서로 다른 기록에 서명했는지 전 세계적으로 확인하는 공개 게시·gossip 기능도 아직 없습니다.
+
+### witness를 별도 HTTP 서비스로 실행
+
+운영자와 분리된 환경에서 witness 키와 DB를 보관합니다. 아래 설정은 로컬 실행 예시이며, 다른 호스트로 노출할 때는 HTTPS 종료 프록시를 사용해야 합니다. CLI는 외부 HTTP 주소로 토큰을 보내지 않습니다.
+
+```bash
+export TRUST404_WITNESS_DB="$PWD/witness.db"
+export TRUST404_WITNESS_KEY_FILE="$PWD/witness.key"
+export TRUST404_WITNESS_ALLOWED_ISSUER_KEYS="$ISSUER_KEY"
+export TRUST404_WITNESS_TOKEN="replace-with-a-separate-random-token"
+.venv/bin/trust404 witness-serve
+```
+
+다른 터미널에서 증명을 제출하고 witness 서명이 맞는지 확인합니다.
+
+```bash
+export TRUST404_WITNESS_TOKEN="replace-with-a-separate-random-token"
+.venv/bin/trust404 witness-submit /tmp/trust404-demo/proof.json \
+  --url http://127.0.0.1:8001 --issuer-key "$ISSUER_KEY" \
+  --witness-key "$(cat witness.pub)" --out /tmp/remote-witness-receipt.json
+.venv/bin/trust404 verify /tmp/trust404-demo/proof.json \
+  --issuer-key "$ISSUER_KEY" \
+  --witness-receipt /tmp/remote-witness-receipt.json \
+  --witness-key "$(cat witness.pub)"
+```
+
+`GET /anchors?issuer_key=...`는 witness가 서명한 이력을 공개합니다. `trust404 witness-history --url http://127.0.0.1:8001 --issuer-key "$ISSUER_KEY" --witness-key "$(cat witness.pub)"`로 서명과 이전 영수증 연결을 검사할 수 있습니다. 별도로 보관한 최신 `receipt_hash`가 있다면 `--expected-latest-hash`도 전달해 이력 끝부분이 생략됐는지 확인하세요.
 
 ## 로컬 HTTP API
 

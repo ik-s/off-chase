@@ -8,7 +8,7 @@ from trust404.crypto import (
     public_key_b64,
     sign_payload,
 )
-from trust404.server import load_app_from_env
+from trust404.server import load_app_from_env, load_witness_app_from_env
 
 
 def test_server_requires_keys_token_and_agent_allowlist(tmp_path, monkeypatch):
@@ -47,3 +47,19 @@ def test_keygen_writes_private_key_with_owner_only_permissions(tmp_path):
     assert (private_file.stat().st_mode & 0o777) == 0o600
     assert (tmp_path / "issuer.pub").read_text().strip()
     assert main(["keygen", "--out", str(private_file)]) == 2
+
+
+def test_witness_server_requires_separate_key_database_and_issuer_allowlist(tmp_path, monkeypatch):
+    witness_key = generate_private_key()
+    issuer = generate_private_key()
+    key_file = tmp_path / "witness.key"
+    key_file.write_text(private_key_b64(witness_key))
+    key_file.chmod(0o600)
+    monkeypatch.setenv("TRUST404_WITNESS_DB", str(tmp_path / "witness.db"))
+    monkeypatch.setenv("TRUST404_WITNESS_KEY_FILE", str(key_file))
+    monkeypatch.setenv("TRUST404_WITNESS_TOKEN", "witness-secret")
+    monkeypatch.setenv("TRUST404_WITNESS_ALLOWED_ISSUER_KEYS", public_key_b64(issuer))
+    assert TestClient(load_witness_app_from_env()).get("/health").json() == {"status": "ok"}
+    monkeypatch.delenv("TRUST404_WITNESS_ALLOWED_ISSUER_KEYS")
+    with pytest.raises(ValueError, match="TRUST404_WITNESS_ALLOWED_ISSUER_KEYS"):
+        load_witness_app_from_env()

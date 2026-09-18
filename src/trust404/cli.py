@@ -7,6 +7,8 @@ import os
 import sys
 import tempfile
 from pathlib import Path
+from urllib.parse import urlencode, urlparse
+from urllib.request import HTTPRedirectHandler, Request, build_opener
 
 from .benchmark import run_benchmark
 from .crypto import (
@@ -16,9 +18,9 @@ from .crypto import (
     public_key_b64,
     sign_payload,
 )
-from .ledger import Ledger
+from .ledger import GENESIS_HASH, Ledger
 from .verify import checkpoint_digest, verify_proof
-from .witness import Witness, verify_witness_receipt
+from .witness import Witness, verify_witness_history, verify_witness_receipt
 
 
 def _write_json(path: Path, value: object) -> None:
@@ -36,6 +38,27 @@ def _strict_pairs(pairs: list[tuple[str, object]]) -> dict:
 
 def load_json_strict(path: Path) -> object:
     return json.loads(path.read_text(encoding="utf-8"), object_pairs_hook=_strict_pairs)
+
+
+def _witness_base_url(value: str) -> str:
+    parsed = urlparse(value)
+    if parsed.username or parsed.password or parsed.query or parsed.fragment or parsed.path not in ("", "/"):
+        raise ValueError("witness URL must be an origin without credentials, path, or query")
+    if parsed.scheme == "https" and parsed.hostname:
+        return value.rstrip("/")
+    if parsed.scheme == "http" and parsed.hostname in {"127.0.0.1", "localhost", "::1"}:
+        return value.rstrip("/")
+    raise ValueError("witness URL must use HTTPS, or HTTP on loopback")
+
+
+class _NoRedirect(HTTPRedirectHandler):
+    def redirect_request(self, request, file_pointer, code, message, headers, new_url):
+        return None
+
+
+def _load_remote_json(request: Request) -> object:
+    with build_opener(_NoRedirect).open(request, timeout=10) as response:
+        return json.loads(response.read().decode("utf-8"), object_pairs_hook=_strict_pairs)
 
 
 def _keygen(path: Path) -> int:
@@ -106,7 +129,16 @@ def _demo_with_scratch(out: Path, scratch: Path) -> int:
     omitted_proof = omitted_ledger.export_proof()
     _write_json(out / "missing-decision.json", omitted_proof)
     (out / "missing-decision.pin").write_text(checkpoint_digest(omitted_proof["checkpoint"]) + "\n", encoding="ascii")
-    print(f"Demo proof and four attack cases written to {out}")
+
+    rewritten_checkpoint_body = {"size": 0, "head_hash": GENESIS_HASH}
+    rewritten_checkpoint = {
+        **rewritten_checkpoint_body,
+        "signature": sign_payload(issuer, rewritten_checkpoint_body),
+    }
+    rewritten_proof = {"format": "trust404-proof-v1", "entries": [], "checkpoint": rewritten_checkpoint}
+    _write_json(out / "rewritten-history.json", rewritten_proof)
+    (out / "rewritten-history.pin").write_text(checkpoint_digest(rewritten_checkpoint) + "\n", encoding="ascii")
+    print(f"Demo proof and five attack cases written to {out}")
     print("The .pin files are local examples; publish a checkpoint digest independently before trusting it as an external anchor.")
     return 0
 
@@ -170,6 +202,20 @@ def main(argv: list[str] | None = None) -> int:
     serve = commands.add_parser("serve", help="run the local HTTP service using TRUST404_* environment variables")
     serve.add_argument("--host", default="127.0.0.1")
     serve.add_argument("--port", type=int, default=8000)
+    witness_serve = commands.add_parser("witness-serve", help="run a separately configured HTTP witness")
+    witness_serve.add_argument("--host", default="127.0.0.1")
+    witness_serve.add_argument("--port", type=int, default=8001)
+    witness_submit = commands.add_parser("witness-submit", help="send a proof to an independent witness")
+    witness_submit.add_argument("proof", type=Path)
+    witness_submit.add_argument("--url", required=True)
+    witness_submit.add_argument("--issuer-key", required=True)
+    witness_submit.add_argument("--witness-key", required=True)
+    witness_submit.add_argument("--out", type=Path, required=True)
+    witness_history = commands.add_parser("witness-history", help="verify the witness's published receipt history")
+    witness_history.add_argument("--url", required=True)
+    witness_history.add_argument("--issuer-key", required=True)
+    witness_history.add_argument("--witness-key", required=True)
+    witness_history.add_argument("--expected-latest-hash")
     anchor = commands.add_parser("witness-anchor", help="sign a checkpoint from a separately controlled witness database")
     anchor.add_argument("proof", type=Path)
     anchor.add_argument("--issuer-key", required=True)
@@ -230,6 +276,54 @@ def main(argv: list[str] | None = None) -> int:
             return 2
         uvicorn.run(app, host=args.host, port=args.port)
         return 0
+    if args.command == "witness-serve":
+        import uvicorn
+
+        from .server import load_witness_app_from_env
+
+        try:
+            app = load_witness_app_from_env()
+        except (OSError, ValueError) as exc:
+            print(f"Cannot start witness server: {exc}", file=sys.stderr)
+            return 2
+        uvicorn.run(app, host=args.host, port=args.port)
+        return 0
+    if args.command == "witness-submit":
+        try:
+            token = os.environ.get("TRUST404_WITNESS_TOKEN")
+            if not token:
+                raise ValueError("TRUST404_WITNESS_TOKEN is required")
+            proof = load_json_strict(args.proof)
+            body = json.dumps({"issuer_key": args.issuer_key, "proof": proof}, ensure_ascii=False).encode("utf-8")
+            request = Request(
+                _witness_base_url(args.url) + "/anchors", data=body, method="POST",
+                headers={"Content-Type": "application/json", "Authorization": f"Bearer {token}"},
+            )
+            receipt = _load_remote_json(request)
+            if not verify_witness_receipt(proof, receipt, args.issuer_key, args.witness_key):
+                print("INVALID\nINVALID_WITNESS_RECEIPT")
+                return 1
+            _write_json(args.out, receipt)
+            print(f"Witness receipt written to {args.out}")
+            return 0
+        except (OSError, UnicodeError, ValueError) as exc:
+            print(f"Cannot submit proof: {exc}", file=sys.stderr)
+            return 2
+    if args.command == "witness-history":
+        try:
+            url = _witness_base_url(args.url) + "/anchors?" + urlencode({"issuer_key": args.issuer_key})
+            receipts = _load_remote_json(Request(url))
+            if not verify_witness_history(
+                receipts, args.issuer_key, args.witness_key,
+                expected_latest_hash=args.expected_latest_hash,
+            ):
+                print("INVALID\nINVALID_WITNESS_HISTORY")
+                return 1
+            print(f"VERIFIED {len(receipts)} witness receipts")
+            return 0
+        except (OSError, UnicodeError, ValueError) as exc:
+            print(f"Cannot read witness history: {exc}", file=sys.stderr)
+            return 2
     if args.witness_receipt is None and args.checkpoint_hash is None:
         parser.error("provide --checkpoint-hash or --witness-receipt with --witness-key")
     if (args.witness_receipt is None) != (args.witness_key is None):

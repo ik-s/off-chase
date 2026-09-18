@@ -38,6 +38,8 @@ A witness first checks the issuer's full proof and whether it extends the last c
 
 A witness receipt only carries its own signature and local append-only history. A malicious witness could equivocate unless its receipts or log are independently published and compared. A witness under the payment operator's control is not an independent anchor.
 
+The witness HTTP service accepts `POST /anchors` with `{issuer_key, proof}` and an operator-to-witness bearer token. It accepts only configured issuer keys and publishes receipt history at `GET /anchors?issuer_key=...`. Each issuer's history starts with `previous_receipt_hash` of 64 zeroes and links each later receipt to the preceding `receipt_hash`. Global `witness_seq` values increase but may have gaps when other issuers are anchored. A verifier can check this history and optionally compare the final hash with a separately saved latest hash. Without that external latest hash, a server can present an old valid prefix of its history.
+
 ## What verification checks
 
 The offline verifier checks the trusted issuer key, checkpoint signature and externally supplied pin or trusted witness receipt, contiguous sequence, hash chain, entry hashes and issuer signatures, agent signatures, enterprise policy signatures, policy hashes, recomputed decisions, one acceptance and at most one decision per request, and any separately held acceptance receipts supplied by the auditor. When trusted agent or enterprise public keys are supplied separately, it also requires every accepted request to use a key from those sets.

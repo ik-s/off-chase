@@ -106,3 +106,27 @@ def test_cli_rejects_untrusted_agent_identity(tmp_path):
     )
     assert result.returncode == 1
     assert "UNTRUSTED_AGENT_KEY" in result.stdout
+
+
+def test_resigned_history_erasure_needs_independently_held_evidence(tmp_path):
+    assert run_cli("demo", "--out", tmp_path).returncode == 0
+    issuer_key = (tmp_path / "issuer.pub").read_text().strip()
+    rewritten_pin = (tmp_path / "rewritten-history.pin").read_text().strip()
+    rewritten = tmp_path / "rewritten-history.json"
+    no_external_evidence = run_cli(
+        "verify", rewritten, "--issuer-key", issuer_key, "--checkpoint-hash", rewritten_pin,
+    )
+    assert no_external_evidence.returncode == 0
+    held_receipt = run_cli(
+        "verify", rewritten, "--issuer-key", issuer_key, "--checkpoint-hash", rewritten_pin,
+        "--acceptance", tmp_path / "acceptance-receipt.json",
+    )
+    assert held_receipt.returncode == 1
+    assert "ACCEPTANCE_OMITTED" in held_receipt.stdout
+    prior_witness = run_cli(
+        "verify", rewritten, "--issuer-key", issuer_key,
+        "--witness-receipt", tmp_path / "witness-receipt.json",
+        "--witness-key", (tmp_path / "witness.pub").read_text().strip(),
+    )
+    assert prior_witness.returncode == 1
+    assert "INVALID_WITNESS_RECEIPT" in prior_witness.stdout

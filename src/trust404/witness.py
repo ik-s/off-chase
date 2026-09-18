@@ -2,7 +2,7 @@
 
 import json
 import sqlite3
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
@@ -23,24 +23,62 @@ RECEIPT_FIELDS = {
 }
 
 
-def verify_witness_receipt(proof: dict, receipt: dict, issuer_public_key: str, witness_public_key: str) -> bool:
-    if type(proof) is not dict or type(receipt) is not dict or set(receipt) != RECEIPT_FIELDS:
+def _valid_signed_receipt(receipt: dict, issuer_public_key: str, witness_public_key: str) -> bool:
+    if type(receipt) is not dict or set(receipt) != RECEIPT_FIELDS:
         return False
     try:
-        checkpoint = proof["checkpoint"]
         unsigned = {key: receipt[key] for key in RECEIPT_FIELDS - {"signature", "receipt_hash"}}
         signed = {**unsigned, "signature": receipt["signature"]}
         return (
             type(receipt["witness_seq"]) is int and receipt["witness_seq"] > 0
+            and type(receipt["size"]) is int and receipt["size"] >= 0
+            and type(receipt["head_hash"]) is str
+            and type(receipt["previous_receipt_hash"]) is str
+            and datetime.fromisoformat(receipt["issued_at"]).utcoffset() == timedelta(0)
             and receipt["issuer_key"] == issuer_public_key
-            and receipt["checkpoint_hash"] == checkpoint_digest(checkpoint)
-            and receipt["size"] == checkpoint["size"]
-            and receipt["head_hash"] == checkpoint["head_hash"]
             and digest(signed) == receipt["receipt_hash"]
             and verify_payload(witness_public_key, unsigned, receipt["signature"])
         )
     except (KeyError, TypeError, ValueError):
         return False
+
+
+def verify_witness_receipt(proof: dict, receipt: dict, issuer_public_key: str, witness_public_key: str) -> bool:
+    if type(proof) is not dict or not _valid_signed_receipt(receipt, issuer_public_key, witness_public_key):
+        return False
+    try:
+        checkpoint = proof["checkpoint"]
+        return (
+            receipt["checkpoint_hash"] == checkpoint_digest(checkpoint)
+            and receipt["size"] == checkpoint["size"]
+            and receipt["head_hash"] == checkpoint["head_hash"]
+        )
+    except (KeyError, TypeError, ValueError):
+        return False
+
+
+def verify_witness_history(
+    receipts: list[dict], issuer_public_key: str, witness_public_key: str,
+    *, expected_latest_hash: str | None = None,
+) -> bool:
+    if type(receipts) is not list or not receipts:
+        return False
+    previous_hash = GENESIS_RECEIPT_HASH
+    previous_size = -1
+    previous_seq = 0
+    for receipt in receipts:
+        if not _valid_signed_receipt(receipt, issuer_public_key, witness_public_key):
+            return False
+        if (
+            receipt["previous_receipt_hash"] != previous_hash
+            or receipt["size"] <= previous_size
+            or receipt["witness_seq"] <= previous_seq
+        ):
+            return False
+        previous_hash = receipt["receipt_hash"]
+        previous_size = receipt["size"]
+        previous_seq = receipt["witness_seq"]
+    return expected_latest_hash is None or previous_hash == expected_latest_hash
 
 
 class Witness:
@@ -67,6 +105,14 @@ class Witness:
 
     def _connect(self) -> sqlite3.Connection:
         return sqlite3.connect(self.path, timeout=30)
+
+    def history(self, issuer_public_key: str) -> list[dict]:
+        with self._connect() as db:
+            rows = db.execute(
+                "SELECT receipt FROM anchors WHERE issuer_key = ? ORDER BY witness_seq",
+                (issuer_public_key,),
+            ).fetchall()
+        return [json.loads(row[0]) for row in rows]
 
     def anchor(self, proof: dict, issuer_public_key: str) -> dict:
         try:
