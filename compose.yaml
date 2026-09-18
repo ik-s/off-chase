@@ -1,0 +1,44 @@
+services:
+  operator:
+    image: trust404:demo
+    build: .
+    command: ["serve", "--host", "0.0.0.0", "--port", "8000"]
+    ports:
+      - "127.0.0.1:${OPERATOR_PORT:-18000}:8000"
+    environment:
+      TRUST404_DB: /data/ledger.db
+      TRUST404_ISSUER_KEY_FILE: /keys/issuer.key
+      TRUST404_OPERATOR_TOKEN: ${OPERATOR_TOKEN:?Run scripts/prepare_compose.py first}
+      TRUST404_ALLOWED_AGENT_KEYS: ${AGENT_PUBLIC_KEY:?Run scripts/prepare_compose.py first}
+    volumes:
+      - operator-data:/data
+      - ./.local/issuer.key:/keys/issuer.key:ro
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=2)"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  witness:
+    image: trust404:demo
+    build: .
+    command: ["witness-serve", "--host", "0.0.0.0", "--port", "8001"]
+    ports:
+      - "127.0.0.1:${WITNESS_PORT:-18001}:8001"
+    environment:
+      TRUST404_WITNESS_DB: /data/witness.db
+      TRUST404_WITNESS_KEY_FILE: /keys/witness.key
+      TRUST404_WITNESS_TOKEN: ${WITNESS_TOKEN:?Run scripts/prepare_compose.py first}
+      TRUST404_WITNESS_ALLOWED_ISSUER_KEYS: ${ISSUER_PUBLIC_KEY:?Run scripts/prepare_compose.py first}
+    volumes:
+      - witness-data:/data
+      - ./.local/witness.key:/keys/witness.key:ro
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8001/health', timeout=2)"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+volumes:
+  operator-data:
+  witness-data:

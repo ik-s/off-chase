@@ -7,3 +7,5 @@ __pycache__/
 *.db-wal
 proof.json
 *.key
+.env
+.local/

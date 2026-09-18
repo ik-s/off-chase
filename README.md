@@ -114,6 +114,28 @@ export TRUST404_ALLOWED_AGENT_KEYS="$(cat agent.pub)"
 
 감사자가 에이전트와 기업의 공개키를 별도로 알고 있다면 `verify`에 `--agent-key "$(cat agent.pub)" --enterprise-key "$(cat enterprise.pub)"`를 추가해 키의 실세계 소유자와 증명 속 키가 일치하는지 강제할 수 있습니다.
 
+## 두 컨테이너로 재현하기
+
+Compose는 운영자와 witness를 별도 컨테이너, 별도 키 파일, 별도 SQLite 볼륨으로 실행합니다. 두 HTTP 포트는 기본적으로 로컬 호스트의 `18000`, `18001`에만 열립니다. 처음 한 번만 로컬 키와 토큰을 생성하세요. `.env`와 `.local/`은 Git에서 제외됩니다.
+
+```bash
+.venv/bin/python scripts/prepare_compose.py --project-root .
+docker compose up --build -d
+.venv/bin/python scripts/compose_smoke.py --project-root .
+docker compose down
+```
+
+스모크 스크립트는 서명된 요청 접수 → 정책 거절 → 증명 내보내기 → 별도 witness 앵커 → 증명·영수증·공개 이력 검증을 수행합니다. 결과 증거는 `.local/runs/<request_id>/`에 저장됩니다. `prepare_compose.py`는 기존 키나 설정을 덮어쓰지 않습니다. 데이터 볼륨은 `docker compose down` 후에도 남아 재실행 시 로그가 이어집니다.
+
+이 개발 호스트에서는 Docker Desktop의 credential helper가 공식 Python 이미지 조회 중 멈췄습니다. Docker 설정을 변경하지 않고 다음처럼 프로젝트 전용 빈 Docker 설정으로 이미지를 가져온 뒤 단독 Compose 실행 파일을 사용해 빌드·실행했습니다.
+
+```bash
+mkdir -p .local/docker-config
+printf '{}\n' > .local/docker-config/config.json
+DOCKER_CONFIG="$PWD/.local/docker-config" docker pull python:3.11-slim
+DOCKER_CONFIG="$PWD/.local/docker-config" docker-compose up --build -d
+```
+
 ## 검증과 측정
 
 ```bash
