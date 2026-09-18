@@ -36,7 +36,7 @@
 
 Docker Desktop의 기존 credential helper가 공식 Python 이미지 조회를 지연시켜, 프로젝트 전용 빈 `DOCKER_CONFIG`로 이미지를 가져온 뒤 Compose를 실행했습니다. 사용자의 Docker 설정은 바꾸지 않았습니다.
 
-CI에 추가한 `up --build --wait -d` 절차도 로컬에서 실행했습니다. 처음에는 두 서비스가 같은 이미지 태그를 동시에 빌드해 충돌했고, witness 이미지 태그를 분리한 뒤 두 서비스가 다시 `healthy`가 됐습니다. 이어서 `compose_smoke.py`를 재실행해 접수·결정·앵커와 세 가지 검증이 모두 성공했습니다. [CI 워크플로](../.github/workflows/ci.yml)에는 같은 왕복 절차를 넣었으며, 원격 GitHub Actions 실행 결과는 아직 없습니다.
+CI에 추가한 `up --build --wait -d` 절차도 로컬에서 실행했습니다. 처음에는 두 서비스가 같은 이미지 태그를 동시에 빌드해 충돌했고, witness 이미지 태그를 분리한 뒤 두 서비스가 다시 `healthy`가 됐습니다. 이어서 `compose_smoke.py`를 재실행해 접수·결정·앵커와 세 가지 검증이 모두 성공했습니다. [CI 워크플로](../.github/workflows/ci.yml)의 [첫 원격 push 실행](https://github.com/ik-s/off-chase/actions/runs/35399624605)에서도 테스트·공격 사례·두 컨테이너 HTTP 왕복이 모두 통과했습니다.
 
 ## 현재 제한
 
