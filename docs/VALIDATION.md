@@ -36,6 +36,8 @@
 
 Docker Desktop의 기존 credential helper가 공식 Python 이미지 조회를 지연시켜, 프로젝트 전용 빈 `DOCKER_CONFIG`로 이미지를 가져온 뒤 Compose를 실행했습니다. 사용자의 Docker 설정은 바꾸지 않았습니다.
 
+CI에 추가한 `up --build --wait -d` 절차도 로컬에서 실행했습니다. 처음에는 두 서비스가 같은 이미지 태그를 동시에 빌드해 충돌했고, witness 이미지 태그를 분리한 뒤 두 서비스가 다시 `healthy`가 됐습니다. 이어서 `compose_smoke.py`를 재실행해 접수·결정·앵커와 세 가지 검증이 모두 성공했습니다. [CI 워크플로](../.github/workflows/ci.yml)에는 같은 왕복 절차를 넣었으며, 원격 GitHub Actions 실행 결과는 아직 없습니다.
+
 ## 현재 제한
 
 컨테이너 두 개는 같은 개발 호스트에 있으므로 독립 기관 운영이나 공개 테스트넷 앵커를 증명하지 않습니다. 공개키 배포, TLS 종료, 프로덕션 비밀 관리, 공개 witness 이력의 전 세계적 비교, 전체 로그에 포함된 결제 정보의 선택적 공개도 구현 범위 밖입니다. 이 제한은 [위협 모델](THREAT_MODEL.md)에 명시했습니다.
