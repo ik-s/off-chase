@@ -1,0 +1,94 @@
+/* Off-Chase identity and readable type scale: body 20, supporting 16, metadata 14. */
+.record-times { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px; margin: 24px 0 0; padding: 22px 0; border-bottom: 1px solid var(--border); }
+.record-times dt { font-size: 16px; color: var(--secondary); margin-bottom: 10px; }
+.record-times dd { margin: 0; font-size: 20px; overflow-wrap: anywhere; }
+.timestamp-note { color: var(--secondary); font-size: 14px; line-height: 1.7; margin-top: 12px; }
+@media (max-width: 767px) { .record-times { grid-template-columns: 1fr; gap: 20px; } .record-times dd { font-size: 18px; } }
+.guided-app { font-size: 20px; }
+.flow-main { width: min(1040px, calc(100% - 64px)); }
+.flow-main.home-layout { width: min(1160px, calc(100% - 64px)); }
+.off-chase-brand { border: 0; background: transparent; padding: 0; text-align: left; gap: 13px; }
+.off-chase-brand:hover:not(:disabled) { background: transparent; }
+.off-chase-brand img { width: 48px; height: 48px; flex-shrink: 0; }
+.flow-header .off-chase-brand strong { font-size: 28px; letter-spacing: -1.1px; }
+.brand-tagline { display: block; font-size: 12px; color: var(--secondary); margin-top: 5px; letter-spacing: .2px; }
+.flow-header-tools .text-button, .flow-back, .flow-context button { font-size: 16px; }
+.guided-app .mock-tag { font-size: 12px; padding: 5px 8px; }
+.guided-app .eyebrow, .flow-intro .eyebrow, .flow-context .eyebrow { font-size: 12px; }
+.context-case, .guided-app .field-label, .flow-card .field-label { font-size: 14px; }
+.flow-steps button { font-size: 18px; }.flow-step-number { font-size: 14px; }
+.flow-steps li:not(:last-child)::after { left: 160px; }
+.flow-intro h1 { font-size: clamp(32px,3.5vw,44px); }
+.flow-intro > p, .flow-actions > p { font-size: 20px; }
+.flow-actions .primary-button, .guided-app .primary-button { font-size: 20px; padding: 17px 23px; }
+.flow-actions .text-button { font-size: 16px; }
+.flow-card .flow-amount { font-size: 54px; }.flow-amount small { font-size: 20px; }
+.request-side p, .policy-side p { font-size: 20px; line-height: 1.7; }
+.request-reference, .request-route { font-size: 14px; }.request-route strong span { font-size: 12px; }
+.decision-context { font-size: 18px; line-height: 1.6; }.decision-word > span { font-size: 20px; }
+.decision-explanation h2 { font-size: 22px; }.decision-explanation code { font-size: 16px; }
+.flow-transition-note, .flow-result-note { font-size: 16px; }
+.result-heading h2 { font-size: 28px; }.result-heading p { font-size: 20px; }
+.flow-checks strong { font-size: 20px; }.flow-checks p { font-size: 16px; }.flow-check-label { font-size: 14px; }
+.all-checks summary { font-size: 16px; }.all-checks summary > span { font-size: 14px; }
+.flow-next h3 { font-size: 22px; }.flow-next p { font-size: 16px; }.flow-next button { font-size: 18px; }
+.technical-toggle { font-size: 16px; }.technical-toggle > span { font-size: 14px; }
+.flow-footer { font-size: 12px; line-height: 1.7; }
+.guided-app .status { font-size: 12px; padding: 7px 9px; }
+.flow-picker .case-filters button { font-size: 14px; padding: 10px 14px; }
+.guided-app .case-item-top { font-size: 14px; }.guided-app .case-amount { font-size: 30px; }.guided-app .case-amount small { font-size: 18px; }
+.guided-app .case-decision { font-size: 14px; line-height: 1.8; }.guided-app .column-heading h2 { font-size: 24px; }
+.guided-app .subdued, .guided-app .context-note, .guided-app .error-message, .guided-app .empty-state { font-size: 16px; }
+.guided-app .small-note { font-size: 14px !important; }.guided-app .count { font-size: 12px; }
+.upload-card h2 { font-size: 26px; }.upload-card p, .upload-card .upload-label { font-size: 20px; }
+.upload-card .file-name { font-size: 16px; }.upload-result h3 { font-size: 22px; }
+.guided-app .checklist strong { font-size: 18px; }.guided-app .checklist p { font-size: 16px; }.guided-app .checklist code { font-size: 14px; }
+.guided-app .check-icon { width: 20px; height: 20px; font-size: 12px; }.guided-app .checklist li { padding: 15px 0; }
+.flow-demo .demo-section h2 { font-size: 24px; }.flow-demo .demo-section > p { font-size: 16px; }
+.flow-demo .demo-buttons strong { font-size: 20px; }.flow-demo .demo-buttons > button > span { font-size: 16px; }
+.technical-workspace .timeline-copy strong { font-size: 18px; }.technical-workspace .timeline-copy > span { font-size: 14px; }
+.technical-workspace .timeline-hint, .technical-workspace .disclosure summary { font-size: 14px; }
+.technical-workspace .detail-fields > div { grid-template-columns: 140px minmax(0,1fr); font-size: 16px; }
+.technical-workspace .detail-fields dd { font-size: 14px; }.technical-workspace .record-heading h3 { font-size: 22px; }
+.technical-workspace .verification-section h3 { font-size: 20px; }.technical-workspace .disclosure pre { font-size: 14px; }
+.home-hero { display: grid; grid-template-columns: minmax(0,1.6fr) minmax(280px,1fr); gap: 60px; align-items: center; padding: 54px 0 65px; }
+.home-message > .eyebrow { font-size: 12px; letter-spacing: 1.4px; margin-bottom: 22px; }
+.home-message h1 { font-size: clamp(36px,3.5vw,52px); line-height: 1.42; font-weight: 600; letter-spacing: -2px; }
+.home-message h1 span { color: #b9c8dc; }.home-message h1:focus { outline: none; }
+.home-message p { font-size: 20px; line-height: 1.9; color: #c4cedd; margin-top: 26px; word-break: keep-all; }
+.home-message .home-description { color: var(--secondary); font-size: 18px; margin-top: 15px; }
+.home-start { display: flex; align-items: center; justify-content: space-between; gap: 33px; margin-top: 32px; }
+.home-start-note { display: block; font-size: 14px; color: var(--secondary); margin-top: 13px; }
+.home-emblem { padding: 30px 20px; display: flex; align-items: center; flex-direction: column; border: 1px solid var(--border); border-radius: 150px 150px 12px 12px; background: #0b1120; }
+.emblem-caption { font: 11px var(--mono); letter-spacing: 1px; color: var(--secondary); padding-top: 24px; }
+.emblem-orbit { width: 230px; height: 230px; border: 1px solid #25304a; border-radius: 50%; display: grid; place-items: center; position: relative; margin: 25px 0 20px; }
+.emblem-orbit::before { content: ''; position: absolute; inset: 14px; border: 1px dashed #25304a; border-radius: 50%; }
+.emblem-orbit img { width: 130px; height: 130px; position: relative; }
+.orbit-dot { position: absolute; top: 42px; right: 15px; width: 9px; height: 9px; background: #d2dce9; border: 3px solid #0b1120; outline: 1px solid #667994; border-radius: 50%; }
+.emblem-name { font-size: 30px; font-weight: 600; letter-spacing: -1px; }.emblem-description { font-size: 13px; color: var(--secondary); margin-top: 8px; }
+.emblem-trace { display: flex; align-items: center; gap: 9px; font: 10px var(--mono); color: var(--secondary); padding: 27px 0 3px; }.emblem-trace i { width: 14px; height: 1px; background: #52637c; }
+.home-how { border-top: 1px solid var(--border); padding-top: 29px; }
+.home-how-heading { display: flex; align-items: center; justify-content: space-between; gap: 20px; }.home-how-heading h2 { font-size: 22px; font-weight: 500; }
+.home-how ol { list-style: none; display: grid; grid-template-columns: repeat(3,1fr); padding: 28px 0 0; }
+.home-how li { padding: 0 27px; border-left: 1px solid var(--border); }.home-how li:first-child { padding-left: 0; border: 0; }
+.home-step { color: var(--secondary); font: 14px var(--mono); }.home-how h3 { font-size: 22px; margin-top: 12px; }.home-how p { color: var(--secondary); font-size: 18px; line-height: 1.8; margin-top: 10px; }
+@media(max-width:1000px) { .home-hero { gap: 30px; grid-template-columns: minmax(0,1.5fr) minmax(230px,1fr); }.emblem-orbit { width: 185px; height: 185px; }.emblem-orbit img { width: 110px; height: 110px; }.desktop-break { display: none; } }
+@media(max-width:767px) {
+  .flow-main, .flow-main.home-layout { width: calc(100% - 36px); }.flow-header { padding: 18px; flex-wrap: wrap; }
+  .flow-header .off-chase-brand strong { font-size: 25px; }.off-chase-brand img { width: 42px; height: 42px; }.brand-tagline { font-size: 10px; }
+  .flow-header-tools { gap: 12px; }.flow-header-tools .text-button { font-size: 14px; }.guided-app .mock-tag { font-size: 10px; }
+  .flow-intro h1 { font-size: 32px; }.flow-intro > p, .flow-actions > p { font-size: 18px; }
+  .flow-context .eyebrow { font-size: 10px; }.context-case { font-size: 12px; }.flow-context button { font-size: 14px; }
+  .flow-steps button { font-size: 14px; }.flow-step-number { font-size: 11px; }.flow-steps li:not(:last-child)::after { left: 94px; right: 8px; }
+  .flow-card .flow-amount { font-size: 35px; }.flow-amount small { font-size: 16px; }.flow-card .field-label { font-size: 10px; }
+  .request-side p, .policy-side p { font-size: 16px; }.request-reference { font-size: 12px; }.request-route { font-size: 11px; }
+  .flow-actions .primary-button, .guided-app .primary-button { font-size: 18px; padding: 15px 19px; }
+  .decision-context { font-size: 14px; }.decision-word > span { font-size: 18px; }.decision-explanation h2 { font-size: 20px; }
+  .result-heading h2 { font-size: 24px; }.result-heading p { font-size: 18px; }.flow-checks strong { font-size: 18px; }.flow-checks p { font-size: 16px; }
+  .flow-check-label { font-size: 12px; }.flow-next button { font-size: 16px; white-space: normal; }.technical-workspace { grid-template-columns: 1fr; }
+  .home-hero { display: block; padding: 25px 0 37px; }.home-message h1 { font-size: 35px; letter-spacing: -1.5px; }.home-message > .eyebrow { font-size: 10px; }
+  .home-message p { font-size: 20px; }.home-message .home-description { font-size: 18px; }.home-emblem { display: none; }
+  .home-how-heading { display: block; }.home-how-heading h2 { margin-top: 12px; }.home-how ol { grid-template-columns: 1fr; gap: 22px; }
+  .home-how li, .home-how li:first-child { padding: 0 0 0 20px; border-left: 1px solid var(--border); }.home-how h3 { display: inline; margin-left: 15px; font-size: 20px; }.home-how p { font-size: 18px; }.home-how p br { display: none; }
+  .flow-footer { font-size: 12px; }.guided-app .case-decision { font-size: 14px; }.flow-picker .case-filters button { font-size: 12px; }
+}
