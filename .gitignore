@@ -9,3 +9,4 @@ proof.json
 *.key
 .env
 .local/
+.worktrees/
