@@ -58,3 +58,15 @@ npm run smoke:evidence
 The script checks chain ID, deployed contract owner and gas balance before writing to the chain. It signs a 4,500 USDC request against a 4,000 USDC policy, anchors the request and `REJECT / LIMIT_EXCEEDED` decision, writes the Evidence Bundle and public key registry, and verifies those files with a separate read-only chain client. The evidence run itself never transfers USDC. If the network misses the contract's 30-second decision window, the request-only bundle remains on disk for later independent `MISSING` verification. The smoke run creates its own role keys and registry; a third party must obtain the trusted role addresses independently before treating the signatures as authenticated identities.
 
 On 2026-09-20, the Sepolia smoke run produced a [request anchor](https://sepolia.etherscan.io/tx/0xc6cee1181e930bcf85be259a4f8a7cfe6b61df9e4a049abb3b9ff244e7f8f973) and [decision anchor](https://sepolia.etherscan.io/tx/0xefb77b9202480b04e8a8c29fd6e6054651e5e1fed9b2e5811ded0db7869efe94). The exported Bundle verified as `VERIFIED` using the separate CLI. An earlier request's [decision transaction](https://sepolia.etherscan.io/tx/0x694655dd4836f591aacd0be4e7237fe473e6a67b60024703d374e06bc7ad6a3b) reverted because its block arrived 36 seconds after the request anchor; its saved request-only Bundle verified as `MISSING`. The [isolated 1 test USDC transfer](https://sepolia.etherscan.io/tx/0x416dd77e223d28d62bd40d7a35b079480059d285371df86f8a6835a597f1432e) also succeeded. These tests do not establish payment settlement by the Anchor contract.
+
+The public signed Bundle and demo role-address registry are in `examples/sepolia-verified/`. To repeat read-only verification against Sepolia without Institution storage or any signing key:
+
+```bash
+RPC_URL=https://ethereum-sepolia-rpc.publicnode.com \
+CHAIN_ID=11155111 \
+ANCHOR_CONTRACT_ADDRESS=0xd021328C42E17d16DF7DC306c326D90F7bC8f940 \
+KEY_REGISTRY_PATH=examples/sepolia-verified/key-registry.json \
+npm run verify -- examples/sepolia-verified/evidence-bundle.json
+```
+
+The registry identifies this demo's mock roles because the project publishes it separately from the Bundle. It does not establish real-world enterprise or institution identity.
