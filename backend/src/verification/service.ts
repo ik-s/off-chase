@@ -99,14 +99,18 @@ export class GatewayService {
       throw new Error('DEADLINE_EXPIRED');
     }
     if (!recovered && await this.anchor.chainTime() > record.decisionDeadline) throw new Error('DEADLINE_EXPIRED');
-    const recoveredTx = recovered && await this.anchor.findDecisionTx(
-      decision.request_id,
-      decisionHash,
-      BigInt(bundle.verification_receipt.request_anchor_block),
-    );
-    const result = recoveredTx
-      ? { decisionTx: recoveredTx }
-      : await this.anchor.anchorDecision(decision.request_id, decisionHash);
+    let result: { decisionTx: `0x${string}` };
+    if (recovered) {
+      const recoveredTx = await this.anchor.findDecisionTx(
+        decision.request_id,
+        decisionHash,
+        BigInt(bundle.verification_receipt.request_anchor_block),
+      );
+      if (!recoveredTx) throw new Error('DECISION_ANCHOR_RECOVERY_FAILED');
+      result = { decisionTx: recoveredTx };
+    } else {
+      result = await this.anchor.anchorDecision(decision.request_id, decisionHash);
+    }
     const completed = EvidenceBundleSchema.parse({
       ...bundle, decision, anchors: { ...bundle.anchors, decision_tx: result.decisionTx },
     });
