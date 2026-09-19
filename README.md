@@ -1,356 +1,160 @@
-# Trust404 Track 3 — Verifiable Off-chain Decision Layer for Agent Payments
+# TRUST404 — 검증 가능한 에이전트 결제 결정 로그
 
-> **기관의 현재 로그를 믿는 것이 아니라, 당시 남겨진 증거를 검증한다.**
+에이전트가 제출한 결제 요청을 **접수**한 시점과 정책 엔진이 **승인 또는 거절**한 시점을 각각 서명해 순서대로 기록합니다. 검증기는 운영자 데이터베이스에 접속하지 않고 `proof.json`, 신뢰하는 공개키, 외부에서 확보한 체크포인트 지문 또는 witness 영수증만으로 기록을 검사합니다.
 
-AI Agent가 기업을 대신해 디지털자산 결제를 요청하고, 기관 Wallet이 실제 실행 전에 정책에 따라 승인·거절하는 환경을 가정합니다.
+현재 구현은 해커톤용 백엔드 시제품입니다. 실제 결제, 블록체인 전송, 프로덕션 키 관리, 공개 블록체인 앵커는 포함하지 않습니다. 원격 저장소의 확정 개발안과 다른 기술 스택·보장 범위는 [원안 대비 구현 차이](docs/IMPLEMENTATION_DELTA.md)에 명시했습니다. 서명과 해시의 정확한 범위는 [프로토콜 설명](docs/PROTOCOL.md), 공격자 가정과 보장 범위는 [위협 모델](docs/THREAT_MODEL.md)에 적었습니다.
 
-이 프로젝트는 **Agent와 Institution 사이에서 발생한 오프체인 결제 판단을 검증 가능한 증거로 남기고, 이후 제3자가 Institution 내부 DB 없이도 당시 사실관계를 독립적으로 검증할 수 있게 하는 Verification Layer**를 구현합니다.
+## 빠른 실행
 
----
+Python 3.11 이상이 필요합니다.
 
-## Why
-
-온체인에서 실제로 실행된 거래는 블록체인에 기록이 남습니다.
-
-하지만 Agent의 요청이 기관의 정책 검사 단계에서 거절되면 실제 결제가 실행되지 않을 수 있으며, 다음과 같은 정보는 기관 내부 로그에만 남을 수 있습니다.
-
-- Agent가 실제로 어떤 요청을 보냈는가
-- 당시 어떤 기업 정책이 적용됐는가
-- 기관이 어떤 결정을 내렸는가
-- 해당 결정이 정책과 일치했는가
-- 과거 기록이 이후 수정되거나 누락되지는 않았는가
-
-분쟁이 발생했을 때 어느 한쪽의 내부 DB만 신뢰해서는 제3자가 당시 사실관계를 독립적으로 확인하기 어렵습니다.
-
----
-
-## What We Build
-
-우리는 Agent Payment 전체를 새로 만들지 않습니다.
-
-이번 MVP는 다음 하나의 흐름에 집중합니다.
-
-```text
-Enterprise
-   │
-   │ Policy
-   ▼
-Agent
-   │
-   │ Signed Request
-   ▼
-Verification Layer
-   │
-   │ Verified Request + Receipt
-   ▼
-Mock Institution Wallet
-   │
-   │ Signed Decision
-   ▼
-Verification Layer
-   │
-   │ Evidence + On-chain Anchor
-   ▼
-Third-party Verifier
+```bash
+python3 -m venv .venv
+.venv/bin/python -m pip install -e '.[test]'
+.venv/bin/trust404 demo --out /tmp/trust404-demo
+.venv/bin/python scripts/attack_report.py --demo-dir /tmp/trust404-demo
 ```
 
-Verification Layer는 선택적 로그 서비스가 아니라 **Agent와 Institution 사이의 필수 Gateway**로 동작합니다.
+정상 증명과 다섯 가지 공격 파일이 생성됩니다. `issuer.pub`은 발행자 공개키이고 `checkpoint.pin`은 체크포인트 SHA-256 지문입니다.
 
-평상시에는 요청과 판단의 증거를 남기고, 분쟁 시에는 제3자가 해당 증거를 다시 검증합니다.
-
----
-
-## MVP Scenario
-
-대표 시나리오는 하나로 고정합니다.
-
-```text
-Enterprise Policy
-1회 결제 한도: 4,000 USDC
-
-Agent Request
-4,500 USDC
-
-Institution Decision
-REJECT / LIMIT_EXCEEDED
+```bash
+ISSUER_KEY="$(cat /tmp/trust404-demo/issuer.pub)"
+PIN="$(cat /tmp/trust404-demo/checkpoint.pin)"
+.venv/bin/trust404 verify /tmp/trust404-demo/proof.json \
+  --issuer-key "$ISSUER_KEY" --checkpoint-hash "$PIN" \
+  --acceptance /tmp/trust404-demo/acceptance-receipt.json
 ```
 
-Verifier는 Institution의 현재 DB를 신뢰하지 않고 다음을 확인합니다.
+종료 코드는 검증 성공 `0`, 증명 무효 또는 누락 탐지 `1`, 잘못된 입력 `2`입니다. 다음 파일을 같은 명령의 증명 경로에 넣으면 공격 탐지를 확인할 수 있습니다.
 
-```text
-요청이 실제 존재했는가
-        ↓
-Agent가 실제 서명했는가
-        ↓
-당시 Policy가 무엇이었는가
-        ↓
-Institution이 어떤 Decision을 남겼는가
-        ↓
-Decision이 Policy와 일치하는가
-        ↓
-당시 남겨진 증거와 현재 Record가 일치하는가
+| 파일 | 시나리오 |
+| --- | --- |
+| `tampered-reason.json` | 거절 사유 변경 |
+| `tampered-policy.json` | 정책 한도 변경 |
+| `deleted-decision.json` | 결정 항목 삭제 |
+| `missing-decision.json` | 접수된 요청의 결정 누락 |
+| `rewritten-history.json` | 운영자가 발행자 키로 빈 로그와 새 체크포인트를 다시 서명해 접수 기록까지 삭제 |
+
+`missing-decision.json`에는 별도 체크포인트가 있으므로 `missing-decision.pin`을 사용합니다. 이 예제의 `.pin` 파일은 같은 컴퓨터에서 만든 것입니다. 실제 독립 앵커가 되려면 결제 운영자가 통제하지 않는 채널에서 지문을 확보해야 합니다.
+
+`rewritten-history.json`은 `rewritten-history.pin`만 사용하면 암호학적으로 유효한 빈 로그입니다. 이 경우에도 별도로 받은 `acceptance-receipt.json`을 `--acceptance`로 넣으면 `ACCEPTANCE_OMITTED`가, 기존 `witness-receipt.json`을 넣으면 `INVALID_WITNESS_RECEIPT`가 나옵니다. 이 사례는 외부에 보관한 증거가 왜 필요한지 보여줍니다.
+
+전체 공격 결과와 컨테이너 실험 기록은 [검증 결과](docs/VALIDATION.md)에 정리했습니다.
+
+## 별도 witness로 체크포인트 서명
+
+witness는 **별도 키와 별도 SQLite DB**를 가지고 이전에 서명한 로그의 분기나 롤백을 거부합니다. 운영자와 분리된 호스트 및 관리 주체에서 다음 명령을 실행할 수 있습니다.
+
+```bash
+.venv/bin/trust404 keygen --out /secure/witness.key
+.venv/bin/trust404 witness-anchor /tmp/trust404-demo/proof.json \
+  --issuer-key "$ISSUER_KEY" \
+  --witness-key-file /secure/witness.key \
+  --db /secure/witness.db \
+  --out /secure/witness-receipt.json
+
+.venv/bin/trust404 verify /tmp/trust404-demo/proof.json \
+  --issuer-key "$ISSUER_KEY" \
+  --witness-receipt /secure/witness-receipt.json \
+  --witness-key "$(cat /secure/witness.pub)"
 ```
 
----
+검증자는 witness 공개키를 별도 신뢰 경로로 받아야 합니다. 데모가 같은 프로세스에서 만든 witness 키는 독립 운영을 증명하지 않습니다. witness 자체가 악의적으로 서로 다른 기록에 서명했는지 전 세계적으로 확인하는 공개 게시·gossip 기능도 아직 없습니다.
 
-## Verification Goals
+### witness를 별도 HTTP 서비스로 실행
 
-Trust404 Track 3의 핵심 기준에 맞춰 네 가지를 검증합니다.
+운영자와 분리된 환경에서 witness 키와 DB를 보관합니다. 아래 설정은 로컬 실행 예시이며, 다른 호스트로 노출할 때는 HTTPS 종료 프록시를 사용해야 합니다. CLI는 외부 HTTP 주소로 토큰을 보내지 않습니다.
 
-### Immutability — 불변성
-
-과거 Request나 Decision 내용이 변경되면 탐지합니다.
-
-### Completeness — 완전성
-
-Verification Layer가 관측한 Request에 대응하는 Decision이 정해진 시간 안에 존재하지 않으면 `MISSING`으로 판단합니다.
-
-### Independent Verification — 독립 검증
-
-Institution DB 없이 Evidence Bundle과 공개 검증 정보만으로 한 건의 판단을 다시 검증합니다.
-
-### Non-repudiation — 부인 방지
-
-Agent와 Institution의 서명을 이용해 이후 자신의 Request / Decision을 쉽게 부인하지 못하도록 합니다.
-
----
-
-## Verifier Status
-
-MVP에서는 다음 상태만 사용합니다.
-
-| Status | Meaning |
-|---|---|
-| `VERIFIED` | 모든 증거와 정책 판단이 정상 |
-| `TAMPERED` | 현재 Record가 과거 On-chain Anchor와 불일치 |
-| `PROCESSING` | Request는 존재하지만 Decision 기한 이전 |
-| `MISSING` | Decision 기한 이후에도 공식 Decision이 없음 |
-| `INVALID` | 서명·연결 관계 등 공식 Evidence 조건을 충족하지 못함 |
-
----
-
-## Demo Scenarios
-
-### 1. Normal Rejection
-
-```text
-4,500 USDC Request
-→ 4,000 USDC Policy
-→ REJECT / LIMIT_EXCEEDED
-→ VERIFIED
+```bash
+export TRUST404_WITNESS_DB="$PWD/witness.db"
+export TRUST404_WITNESS_KEY_FILE="$PWD/witness.key"
+export TRUST404_WITNESS_ALLOWED_ISSUER_KEYS="$ISSUER_KEY"
+export TRUST404_WITNESS_TOKEN="replace-with-a-separate-random-token"
+.venv/bin/trust404 witness-serve
 ```
 
-### 2. Decision Tampering
+다른 터미널에서 증명을 제출하고 witness 서명이 맞는지 확인합니다.
 
-```text
-Original
-LIMIT_EXCEEDED
-
-Modified
-KYT_RISK
-
-→ On-chain Hash mismatch
-→ TAMPERED
+```bash
+export TRUST404_WITNESS_TOKEN="replace-with-a-separate-random-token"
+.venv/bin/trust404 witness-submit /tmp/trust404-demo/proof.json \
+  --url http://127.0.0.1:8001 --issuer-key "$ISSUER_KEY" \
+  --witness-key "$(cat witness.pub)" --out /tmp/remote-witness-receipt.json
+.venv/bin/trust404 verify /tmp/trust404-demo/proof.json \
+  --issuer-key "$ISSUER_KEY" \
+  --witness-receipt /tmp/remote-witness-receipt.json \
+  --witness-key "$(cat witness.pub)"
 ```
 
-### 3. Missing Decision
+`GET /anchors?issuer_key=...`는 witness가 서명한 이력을 공개합니다. `trust404 witness-history --url http://127.0.0.1:8001 --issuer-key "$ISSUER_KEY" --witness-key "$(cat witness.pub)"`로 서명과 이전 영수증 연결을 검사할 수 있습니다. 별도로 보관한 최신 `receipt_hash`가 있다면 `--expected-latest-hash`도 전달해 이력 끝부분이 생략됐는지 확인하세요.
 
-```text
-Request Anchor exists
-Decision does not exist
+## 로컬 HTTP API
 
-Deadline before
-→ PROCESSING
+키 파일은 생성 시 소유자만 읽을 수 있는 `0600` 권한으로 저장됩니다. 발행자, 에이전트, 기업은 서로 다른 키를 사용합니다.
 
-Deadline after
-→ MISSING
+```bash
+.venv/bin/trust404 keygen --out issuer.key
+.venv/bin/trust404 keygen --out agent.key
+.venv/bin/trust404 keygen --out enterprise.key
+
+export TRUST404_DB="$PWD/ledger.db"
+export TRUST404_ISSUER_KEY_FILE="$PWD/issuer.key"
+export TRUST404_OPERATOR_TOKEN="replace-with-a-long-random-token"
+export TRUST404_ALLOWED_AGENT_KEYS="$(cat agent.pub)"
+.venv/bin/trust404 serve
 ```
 
-### 4. Institution DB Deletion
+기본 바인딩은 `127.0.0.1:8000`입니다. `TRUST404_ALLOWED_AGENT_KEYS`는 쉼표로 구분한 에이전트 공개키 목록입니다.
 
-Institution DB에서 Decision Row가 사라져도, 이미 확보한 Evidence와 On-chain Anchor를 이용해 과거 Decision을 독립적으로 검증합니다.
+| API | 인증 | 동작 |
+| --- | --- | --- |
+| `POST /requests` | 허용된 에이전트 키와 요청 서명 | 접수 영수증 발행 |
+| `POST /requests/{id}/decision` | `Authorization: Bearer <operator token>`와 기업 정책 서명 | 정책 평가 및 결정 영수증 발행 |
+| `GET /proof` | 운영자 토큰 | 현재 전체 로그와 서명된 체크포인트 내보내기 |
+| `GET /health` | 없음 | 프로세스 상태 |
 
-> 이 데모는 “기관이 삭제 행위를 했다는 사실”을 증명하는 것이 아니라, **현재 기관 DB에 Record가 없어도 당시 Decision의 존재와 무결성을 확인할 수 있음**을 보여줍니다.
+`POST /requests` 본문은 `{"request": {...}, "agent_signature": "..."}`입니다. 요청에는 `request_id`, `agent_key`, `enterprise_key`, `amount_minor`, `currency`, `destination`이 필요합니다. `POST /requests/{id}/decision` 본문은 `{"policy": {...}, "policy_signature": "..."}`이고 정책에는 `version`, `max_amount_minor`, `currency`가 필요합니다. 서명할 JSON을 파일에 저장한 후 `.venv/bin/trust404 sign request.json --key-file agent.key` 또는 정책용 `enterprise.key`로 서명 문자열을 얻을 수 있습니다. 금액은 해당 통화의 최소 단위로 표현한 양의 정수입니다.
 
----
+감사자가 에이전트와 기업의 공개키를 별도로 알고 있다면 `verify`에 `--agent-key "$(cat agent.pub)" --enterprise-key "$(cat enterprise.pub)"`를 추가해 키의 실세계 소유자와 증명 속 키가 일치하는지 강제할 수 있습니다.
 
-## Evidence Bundle
+## 두 컨테이너로 재현하기
 
-분쟁 시 제3자가 받는 한 사건의 증거 묶음입니다.
+Compose는 운영자와 witness를 별도 컨테이너, 별도 키 파일, 별도 SQLite 볼륨으로 실행합니다. 두 HTTP 포트는 기본적으로 로컬 호스트의 `18000`, `18001`에만 열립니다. 처음 한 번만 로컬 키와 토큰을 생성하세요. `.env`와 `.local/`은 Git에서 제외됩니다.
 
-```text
-evidence-bundle-REQ-001.json
+```bash
+.venv/bin/python scripts/prepare_compose.py --project-root .
+docker compose up --build -d
+.venv/bin/python scripts/compose_smoke.py --project-root .
+docker compose down
 ```
 
-포함 내용:
+스모크 스크립트는 서명된 요청 접수 → 정책 거절 → 증명 내보내기 → 별도 witness 앵커 → 증명·영수증·공개 이력 검증을 수행합니다. 결과 증거는 `.local/runs/<request_id>/`에 저장됩니다. `prepare_compose.py`는 기존 키나 설정을 덮어쓰지 않습니다. 데이터 볼륨은 `docker compose down` 후에도 남아 재실행 시 로그가 이어집니다.
 
-```text
-Policy
-Request
-Verification Receipt
-Decision
-Anchor Information
+이 개발 호스트에서는 Docker Desktop의 credential helper가 공식 Python 이미지 조회 중 멈췄습니다. Docker 설정을 변경하지 않고 다음처럼 프로젝트 전용 빈 Docker 설정으로 이미지를 가져온 뒤 단독 Compose 실행 파일을 사용해 빌드·실행했습니다.
+
+```bash
+mkdir -p .local/docker-config
+printf '{}\n' > .local/docker-config/config.json
+DOCKER_CONFIG="$PWD/.local/docker-config" docker pull python:3.11-slim
+DOCKER_CONFIG="$PWD/.local/docker-config" docker-compose up --build -d
 ```
 
-Evidence Bundle 자체는 수정 가능한 일반 JSON 파일입니다.
+## 검증과 측정
 
-중요한 것은 파일을 수정할 수 없게 만드는 것이 아니라:
-
-> **파일이 변경되면 Signature / Hash / On-chain Anchor 검증에서 반드시 드러나게 만드는 것**
-
-입니다.
-
----
-
-## Blockchain Role
-
-Blockchain에 원본 결제 데이터를 모두 저장하지 않습니다.
-
-Blockchain은 오직:
-
-> **“이 시점에 이 Record의 Hash가 실제로 존재했다.”**
-
-를 고정하는 외부 기준점으로 사용합니다.
-
-```text
-Off-chain Record
-→ Hash
-→ On-chain Anchor
+```bash
+.venv/bin/python -m pytest -q
+.venv/bin/trust404 benchmark --requests 1000
 ```
 
----
+2026-09-19 이 개발 환경에서 1000건 요청, 2000개 로그 항목, 1.47 MB 증명을 측정한 한 실행은 생성 2.36초, 검증 1.00초였습니다. 다른 실행은 생성 9.1초, 검증 2.9초였습니다. 자동 공격 보고서는 다섯 사례의 탐지 경로를 확인합니다. 수치는 환경에 따라 달라집니다.
 
-## Tech Stack
+GitHub Actions의 [백엔드 검증 워크플로](.github/workflows/ci.yml)는 린트·단위 테스트·공격 보고서·두 컨테이너의 실제 HTTP 왕복 검증을 실행합니다.
 
-### Application
+## 보장 범위
 
-- TypeScript
-- React + Vite
-- Node.js + Express
-- Supabase PostgreSQL
-
-### Verification / EVM
-
-- `viem`
-- `canonicalize`
-- `zod`
-- Solidity
-- OpenZeppelin Contracts
-- Hardhat
-- Sepolia Testnet
-
----
-
-## Core Libraries
-
-| Library | Purpose |
-|---|---|
-| `viem` | Hash, Signature, RPC, Contract interaction |
-| `canonicalize` | 동일 JSON → 동일한 문자열 표현 |
-| `zod` | Record / Evidence Bundle Schema 검증 |
-| `@openzeppelin/contracts` | Anchor Contract 접근 권한 |
-| `hardhat` | Contract 개발·테스트·배포 |
-| `@supabase/supabase-js` | PostgreSQL 접근 |
-
-AgentKit, AP2 SDK, x402, ERC-4337 Wallet SDK 등은 이번 MVP에 사용하지 않습니다.
-
-핵심 검증 로직에 집중하기 위해 Agent와 Institution은 Mock으로 구현합니다.
-
----
-
-## Project Scope
-
-### In Scope
-
-- 기업 Policy 한 가지: `max_amount`
-- Signed Agent Request
-- Mandatory Verification Gateway
-- Signed Institution Decision
-- Request / Decision On-chain Anchor
-- Verification Receipt
-- Evidence Bundle
-- Independent Verifier
-- Tampered / Missing / DB Deleted Demo
-
-### Out of Scope
-
-- 실제 자금 전송
-- 실제 금융기관 연동
-- 실제 LLM Agent
-- Agent Payment 전체 프로토콜
-- AP2 전체 연동
-- KYT / AML 판단 정확성
-- 복잡한 정책 엔진
-- Merkle batching
-- Key Rotation
-- 실제 Custody Wallet
-
----
-
-## Documents
-
-프로젝트 문서는 역할별로 분리합니다.
-
-### `PROJECT_OVERVIEW.md`
-
-무엇을 왜 만드는지 설명합니다.
-
-- 문제 정의
-- 제품 방향
-- MVP 범위
-- 핵심 사용자 흐름
-- 데모 시나리오
-
-### `DEVELOPMENT.md`
-
-실제 구현 기준입니다.
-
-- Record Schema
-- Hash / Signature
-- Policy Hash
-- Deadline
-- Anchor Contract
-- Evidence Bundle
-- Verifier
-- API
-- Tests
-
-### `DESIGN.md`
-
-검증 과정을 심사자에게 이해하기 쉽게 보여주는 화면 기준입니다.
-
-- Case List
-- Evidence Timeline
-- Evidence Detail
-- 상태 표현
-- 공격 데모 UX
-
----
-
-## Development Principle
-
-이 프로젝트의 목적은 Blockchain에 모든 것을 기록하는 것이 아닙니다.
-
-```text
-Agent Request
-     ↓
-Verification Layer
-     ↓
-Institution Decision
-     ↓
-Evidence
-     ↓
-Independent Verification
-```
-
-최종적으로 우리가 답하려는 질문은 하나입니다.
-
-> **Institution이 지금 보여주는 내부 로그를 믿지 않고도, 당시 어떤 Request와 Decision이 실제로 존재했는지 제3자가 검증할 수 있는가?**
-
----
-
-## Hackathon
-
-**Trust404 — Track 3: Verifiable Off-chain Decisions**
-
-MVP는 넓은 Agentic Commerce 제품을 만드는 대신, **한 건의 오프체인 거절을 끝까지 검증하는 핵심 경로의 기술 완성도**에 집중합니다.
+- 에이전트가 서명한 요청, 기업이 서명한 정책, 발행자가 서명한 접수·결정이 같은 요청에 묶입니다.
+- 체크포인트 지문을 외부에 보관하거나 별도 witness가 서명한 뒤에는 그 시점의 로그에서 수정·삭제·순서 변경을 검출할 수 있습니다.
+- 유효한 접수 영수증을 따로 가진 검증자는 운영자가 해당 접수 항목 전체를 새 증명에서 빼더라도 누락을 검출할 수 있습니다.
+- `MISSING_DECISION`은 **해당 체크포인트 시점에 결정이 없음**을 뜻합니다. 처리 기한 위반 여부를 판정하지는 않습니다.
+- 운영자가 접수 영수증을 발행하지 않은 요청은 이 시스템만으로 수신 사실을 증명할 수 없습니다.
+- 공개키가 어느 실세계 기업·에이전트에 속하는지 확인하는 등록 체계, 공개 체인 앵커, 전송 암호화, 개인정보 보호, 로그 분할 공개는 아직 구현하지 않았습니다. 전체 증명에는 요청 금액과 목적지가 포함되므로 접근을 제한해야 합니다.
