@@ -1,4 +1,4 @@
-import { formatUsdc, statusDescriptions } from './data/presentation.ts';
+import { formatUsdc, statusDescriptions, utc } from './data/presentation.ts';
 import { statuses } from './data/types.ts';
 import type { CaseDetail, CaseFilter as Filter, CaseSummaryViewModel, DemoScenario, EvidenceSelection, VerificationCheckViewModel, VerificationOutcome, VerificationStatus } from './data/types.ts';
 
@@ -21,7 +21,7 @@ export function CaseList({ cases, selectedId, filter, onFilter, onSelect }: { ca
   const filtered = cases.filter(item => filter === 'ALL' || item.status === filter);
   return <><div className="column-heading"><div><span className="eyebrow">WORKSPACE</span><h2>Case List <span className="count">{cases.length.toString().padStart(2, '0')}</span></h2></div></div><CaseFilter value={filter} onChange={onFilter} />
     <div className="case-items">{filtered.map(item => <CaseListItem key={item.id} item={item} selected={selectedId === item.id} onClick={() => onSelect(item.id)} />)}{!filtered.length && <div className="empty-state">이 상태의 사건이 없습니다.<button className="text-button" onClick={() => onFilter('ALL')}>모든 사건 보기 →</button></div>}</div>
-    <div className="sidebar-note"><span className="eyebrow">EVIDENCE, NOT ASSUMPTIONS</span><p>기관의 현재 로그가 아닌,<br />당시 남겨진 증거를 확인합니다.</p><span>세션 종료 시 데모는 초기화됩니다.</span></div></>;
+    </>;
 }
 
 export const evidenceLabels: Record<EvidenceSelection, string> = { policy: 'Policy Record', request: 'Request Record', verification_receipt: 'Verification Receipt', decision: 'Decision Record', anchors: 'On-chain Evidence' };
@@ -31,13 +31,12 @@ export function EvidenceTimelineItem({ index, title, subtitle, selected, state, 
 export function EvidenceTimeline({ detail, selected, onSelect }: { detail: CaseDetail; selected: EvidenceSelection; onSelect: (value: EvidenceSelection) => void }) {
   const { bundle } = detail;
   const items: { key: EvidenceSelection; title: string; subtitle: string; state: string }[] = [
-    { key: 'policy', title: 'Enterprise Policy', subtitle: `1회 최대 ${formatUsdc(bundle.policy.max_amount_base_units)} USDC`, state: `POLICY V${bundle.policy.version}` },
-    { key: 'request', title: 'Agent Request', subtitle: `${formatUsdc(bundle.request.amount_base_units)} USDC 결제 요청`, state: 'OBSERVED' },
-    { key: 'verification_receipt', title: 'Verification Receipt', subtitle: '공식 Gateway에서 요청 관측 · Request Anchored', state: 'RECEIPT' },
-    { key: 'decision', title: 'Institution Decision', subtitle: bundle.decision ? `${bundle.decision.decision} / ${bundle.decision.reason_code}` : 'Decision이 아직 없습니다', state: bundle.decision ? 'RECORDED' : detail.report.status },
-    { key: 'anchors', title: 'On-chain Evidence', subtitle: `Request Anchored · ${detail.decisionAnchor ? 'Decision Anchored' : 'Decision Anchor 없음'}`, state: 'SEPOLIA' },
+    { key: 'request', title: 'Request', subtitle: `${utc(Date.parse(bundle.request.created_at) / 1000)} · ${formatUsdc(bundle.request.amount_base_units)} USDC`, state: 'RECORDED' },
+    { key: 'verification_receipt', title: 'Verification Receipt', subtitle: `${utc(bundle.verification_receipt.observed_at)} · Request Anchor 관측`, state: 'OBSERVED' },
+    { key: 'decision', title: 'Decision', subtitle: bundle.decision ? `${bundle.decision.decision} / ${bundle.decision.reason_code} · 생성 시각 미제공` : '결정 기록 없음', state: bundle.decision ? 'RECORDED' : detail.report.status },
+    { key: 'anchors', title: 'Evidence · On-chain Anchors', subtitle: `Request ${utc(detail.requestAnchor.timestamp)} · Decision ${detail.decisionAnchor ? utc(detail.decisionAnchor.timestamp) : '없음'}`, state: 'SEPOLIA' },
   ];
-  return <section className="timeline-section" aria-labelledby="timeline-heading"><div className="section-heading"><div><span className="eyebrow">FOLLOW THE EVIDENCE</span><h2 id="timeline-heading">Evidence Timeline</h2></div><span className="subdued">05 steps</span></div><ol className="timeline">{items.map(({ key, ...item }, index) => <EvidenceTimelineItem key={key} {...item} index={index} selected={selected === key} onClick={() => onSelect(key)} />)}</ol><p className="timeline-hint">각 단계를 선택해 오른쪽에서 검증 근거를 확인하세요.</p></section>;
+  return <section className="timeline-section" aria-labelledby="timeline-heading"><div className="section-heading"><h2 id="timeline-heading">Evidence Timeline</h2><span className="subdued">UTC</span></div><ol className="timeline">{items.map(({ key, ...item }, index) => <EvidenceTimelineItem key={key} {...item} index={index} selected={selected === key} onClick={() => onSelect(key)} />)}</ol><p className="timeline-hint">Anchor 시각은 각 기록의 등록 시각입니다. Decision 생성 시각과 구분됩니다.</p></section>;
 }
 
 export function VerificationChecklist({ checks }: { checks: VerificationCheckViewModel[] }) {
