@@ -2,6 +2,8 @@
 
 ## Implemented
 
+Latest revision restores the original guided design and removes the audit-workbench stylesheet. Changes relative to that design are limited to shorter copy: one landing description, compact workflow captions, record-based page titles and concise action/result labels. Production build and all 14 tests pass.
+
 - Isolated React + Vite + TypeScript app in `frontend/`, using ordinary CSS, React hooks and Zod only.
 - Off-Chase introduction → explicit request selection → guided request → decision → evidence flow, separate payment and evidence statuses, deferred five-step Timeline and record-specific technical details. No request is selected automatically.
 - Async, injected repository port with session-local Mock implementation; no Backend, Smart Contract, cryptographic verification, RPC or database logic.

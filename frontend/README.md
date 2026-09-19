@@ -18,6 +18,8 @@ The app opens on an Off-Chase service introduction. Select “요청 선택하�
 
 ## Guided experience
 
+The original landing, request picker and step-by-step card layout are restored. Copy is shortened to record-oriented headings (`REQ-001 · Request / Decision / Evidence`), concise field labels and actions. The landing retains its headline and emblem with a single description; workflow captions remain without explanatory paragraphs. Typography, timestamps and disclosure behavior are unchanged.
+
 The interface follows service introduction → request picker → the progressive review below. The Off-Chase logo in the header returns to the introduction; the same original SVG is used as the favicon. Body text and primary actions are approximately 20px, with 14–16px supporting text and responsive adjustments.
 
 1. **요청 확인**: compare the request amount and policy limit; one primary action opens the institution's decision.
