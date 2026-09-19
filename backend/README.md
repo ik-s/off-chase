@@ -24,3 +24,14 @@ npx hardhat run scripts/deploy-anchor.ts --build-profile production --network se
 ```
 
 The deploy script checks chain ID `11155111` and the contract owner. It has not yet been run on Sepolia. Gateway tests use a temporary in-memory implementation of the `EvidenceStore` port; the Supabase repository, Express routes, backend runtime key loading, demo endpoints and frontend API adapter are pending. No runtime credentials or private keys are committed.
+
+For an isolated **real testnet USDC transfer** check, fund a disposable Sepolia wallet with test ETH for gas and at least 1 test USDC. The script uses [Circle's Sepolia test USDC contract](https://developers.circle.com/stablecoins/usdc-contract-addresses), sends 1 USDC to a separate test address, and checks the mined receipt's exact `Transfer` event and both balance changes. Keep the wallet JSON outside Git; it needs `{"chainId":11155111,"address":"0xYourWalletAddress","privateKey":"0x..."}`. Run:
+
+```bash
+RPC_URL=https://ethereum-sepolia-rpc.publicnode.com \
+SMOKE_WALLET_PATH=/absolute/path/to/test-wallet.json \
+SMOKE_RECIPIENT=0xYourOtherTestAddress \
+npm run smoke:usdc
+```
+
+The script refuses a wrong chain ID, missing gas or USDC, a failed simulation, an unrelated event, and unexpected balance changes. Its result is a token transfer check, separate from the DecisionAnchor evidence proof; the MVP contract does not settle payments.
