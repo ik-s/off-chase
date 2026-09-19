@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import type { EvidenceStore } from '../verification/service.ts';
+import { hashRecord } from '../crypto/records.ts';
 import {
   EvidenceBundleSchema,
   DecisionSchema,
@@ -26,6 +27,7 @@ export interface SupabaseQuery {
 
 export interface SupabaseEvidenceClient {
   from(table: string): SupabaseQuery;
+  rpc(functionName: string, args: Record<string, unknown>): Promise<QueryResult<unknown>>;
 }
 
 interface JsonRow {
@@ -65,38 +67,31 @@ export class SupabaseEvidenceStore implements EvidenceStore {
     return row ? asRecord(row.record, EvidenceBundleSchema) : null;
   }
 
+  async listBundles(): Promise<EvidenceBundle[]> {
+    const query = this.client.from('evidence_bundles').select('record');
+    const result = await (query as unknown as Promise<QueryResult<JsonRow[]>>);
+    return ensure(result, 'LIST_BUNDLES').map((row) => asRecord(row.record, EvidenceBundleSchema));
+  }
+
   async saveBundle(bundle: EvidenceBundle): Promise<void> {
     const parsed = EvidenceBundleSchema.parse(bundle);
-    const requestId = parsed.request.request_id;
-    ensure(await this.client.from('policies').upsert({
-      policy_id: parsed.policy.policy_id,
-      record: parsed.policy,
-    }, { onConflict: 'policy_id' }), 'SAVE_POLICY');
-    ensure(await this.client.from('requests').upsert({
-      request_id: requestId,
-      policy_id: parsed.request.policy_id,
-      record: parsed.request,
-    }, { onConflict: 'request_id' }), 'SAVE_REQUEST');
-    ensure(await this.client.from('verification_receipts').upsert({
-      request_id: requestId,
-      record: parsed.verification_receipt,
-    }, { onConflict: 'request_id' }), 'SAVE_RECEIPT');
-    ensure(await this.client.from('anchors').upsert({
-      request_id: requestId,
-      chain_id: parsed.anchors.chain_id,
-      contract_address: parsed.anchors.contract_address,
-      request_tx: parsed.anchors.request_tx,
-      decision_tx: parsed.anchors.decision_tx ?? null,
-    }, { onConflict: 'request_id' }), 'SAVE_ANCHOR');
-    ensure(await this.client.from('evidence_bundles').upsert({
-      request_id: requestId,
-      policy_id: parsed.policy.policy_id,
-      record: parsed,
-    }, { onConflict: 'request_id' }), 'SAVE_BUNDLE');
+    ensure(await this.client.rpc('persist_evidence_bundle', { p_bundle: parsed }), 'SAVE_BUNDLE');
+  }
+
+  async saveCompletedBundle(bundle: EvidenceBundle): Promise<void> {
+    await this.saveBundle(bundle);
   }
 
   async saveDecision(decision: DecisionRecord): Promise<void> {
     const parsed = asRecord(decision, DecisionSchema);
+    const existing = ensure(await this.client.from('decisions').select('record').eq('request_id', parsed.request_id).maybeSingle<JsonRow>(), 'GET_DECISION');
+    if (existing) {
+      const previous = asRecord(existing.record, DecisionSchema);
+      if (hashRecord(previous, 'institution_signature') !== hashRecord(parsed, 'institution_signature')) {
+        throw new Error('IMMUTABLE_DECISION_CONFLICT');
+      }
+      return;
+    }
     ensure(await this.client.from('decisions').upsert({
       request_id: parsed.request_id,
       policy_id: parsed.policy_id,

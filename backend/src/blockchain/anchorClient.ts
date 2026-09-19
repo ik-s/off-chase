@@ -56,6 +56,15 @@ export class ChainAnchorReader {
     return Number(block.timestamp);
   }
 
+  async findDecisionTx(requestId: string, decisionHash: Hex): Promise<Hex | null> {
+    const logs = await this.reader.getLogs({
+      address: this.address,
+    });
+    const key = requestKey(requestId);
+    const parsed = parseEventLogs({ abi: anchorAbi, eventName: 'DecisionAnchored', logs });
+    return parsed.filter((log) => log.args.requestKey === key && log.args.decisionHash === decisionHash).at(-1)?.transactionHash ?? null;
+  }
+
   async verifyRequestTx(input: {
     requestId: string; requestHash: Hex; policyHash: Hex; tx: Hex;
     blockNumber: number; observedAt: number; decisionDeadline: number;

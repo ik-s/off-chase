@@ -58,22 +58,48 @@ class FakeQuery implements SupabaseQuery {
     return this.upsert(values);
   }
   delete() { this.deleting = true; return this; }
-  then<TResult1 = { data: null; error: null }, TResult2 = never>(
-    onfulfilled?: ((value: { data: null; error: null }) => TResult1 | PromiseLike<TResult1>) | null,
+  then<TResult1 = { data: unknown; error: null }, TResult2 = never>(
+    onfulfilled?: ((value: { data: unknown; error: null }) => TResult1 | PromiseLike<TResult1>) | null,
     onrejected?: ((reason: unknown) => TResult2 | PromiseLike<TResult2>) | null,
   ): PromiseLike<TResult1 | TResult2> {
     if (this.deleting && this.filter) {
       for (const [key, row] of this.rows) if (row[this.filter.column] === this.filter.value) this.rows.delete(key);
     }
-    return Promise.resolve({ data: null, error: null }).then(onfulfilled, onrejected);
+    const result: { data: unknown; error: null } = { data: this.deleting ? null : [...this.rows.values()], error: null };
+    return Promise.resolve(result).then(onfulfilled, onrejected);
   }
 }
 
 class FakeClient implements SupabaseEvidenceClient {
   readonly tables = new Map<string, Map<string, Record<string, unknown>>>();
+  failRpc = false;
   from(table: string) {
     if (!this.tables.has(table)) this.tables.set(table, new Map());
     return new FakeQuery(this.tables.get(table)!);
+  }
+  async rpc(_functionName: string, args: Record<string, unknown>) {
+    if (this.failRpc) return { data: null, error: { message: 'injected transaction failure' } };
+    const input = args.p_bundle as EvidenceBundle;
+    const rows: Array<[string, string, Record<string, unknown>]> = [
+      ['policies', input.policy.policy_id, { policy_id: input.policy.policy_id, record: input.policy }],
+      ['requests', input.request.request_id, { request_id: input.request.request_id, policy_id: input.request.policy_id, record: input.request }],
+      ['verification_receipts', input.request.request_id, { request_id: input.request.request_id, record: input.verification_receipt }],
+      ['anchors', input.request.request_id, { request_id: input.request.request_id, chain_id: input.anchors.chain_id, contract_address: input.anchors.contract_address, request_tx: input.anchors.request_tx, decision_tx: input.anchors.decision_tx ?? null }],
+      ['evidence_bundles', input.request.request_id, { request_id: input.request.request_id, policy_id: input.policy.policy_id, record: input }],
+    ];
+    if (input.decision) rows.push(['decisions', input.request.request_id, { request_id: input.request.request_id, policy_id: input.decision.policy_id, record: input.decision }]);
+    for (const [table, key, row] of rows) {
+      const existing = this.tables.get(table)?.get(key);
+      const immutable = ['policies', 'requests', 'verification_receipts', 'decisions'].includes(table);
+      if (immutable && existing && JSON.stringify(existing.record) !== JSON.stringify(row.record)) {
+        return { data: null, error: { message: `IMMUTABLE_${table.toUpperCase()}_CONFLICT` } };
+      }
+    }
+    for (const [table, key, row] of rows) {
+      if (!this.tables.has(table)) this.tables.set(table, new Map());
+      this.tables.get(table)!.set(key, structuredClone(row));
+    }
+    return { data: null, error: null };
   }
 }
 
@@ -88,6 +114,7 @@ describe('SupabaseEvidenceStore', () => {
     assert.deepEqual(await store.getBundle(input.request.request_id), input);
     assert.equal(client.tables.get('requests')?.size, 1);
     assert.equal(client.tables.get('anchors')?.size, 1);
+    assert.deepEqual(await store.listBundles(), [input]);
   });
 
   it('deletes only the institution decision row while retaining the evidence bundle', async () => {
@@ -106,5 +133,24 @@ describe('SupabaseEvidenceStore', () => {
     const store = new SupabaseEvidenceStore(new FakeClient());
     assert.equal(await store.getPolicy('missing'), null);
     assert.equal(await store.getBundle('missing'), null);
+  });
+
+  it('leaves every table unchanged when the transactional write fails', async () => {
+    const client = new FakeClient();
+    const store = new SupabaseEvidenceStore(client);
+    client.failRpc = true;
+    await assert.rejects(store.saveCompletedBundle(bundle()), /SUPABASE_SAVE_BUNDLE_FAILED/);
+    assert.equal(client.tables.size, 0);
+  });
+
+  it('does not overwrite a signed request when the same ID is reused', async () => {
+    const client = new FakeClient();
+    const store = new SupabaseEvidenceStore(client);
+    const input = bundle();
+    await store.saveBundle(input);
+    const altered = structuredClone(input);
+    altered.request.amount_base_units = '4500000001';
+    await assert.rejects(store.saveBundle(altered), /SUPABASE_SAVE_BUNDLE_FAILED/);
+    assert.deepEqual(await store.getBundle(input.request.request_id), input);
   });
 });

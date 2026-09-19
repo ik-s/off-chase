@@ -35,3 +35,5 @@ SUPABASE_SERVICE_ROLE_KEY=replace-me
 ```
 
 Use `createSupabaseEvidenceStoreFromEnv()` from backend runtime wiring when that wiring is added. The service role key is required for server writes; never expose it to the frontend. Signed records and the evidence bundle are stored as JSONB, while request IDs remain unique relational keys. Deleting a row from `decisions` is intentionally independent from the already exported bundle.
+
+`persist_evidence_bundle` is a `security definer` transaction used by `saveCompletedBundle()`. It writes the decision, anchor metadata, and completed bundle together, rejects replacement of a signed policy/request/receipt/decision with a different record, and advances an existing request from pending to complete. `GatewayService` uses this operation when available and can recover a committed decision anchor by locating its `DecisionAnchored` event before retrying persistence. `listBundles()` is available for the later case-list API and is not part of the Gateway port.
