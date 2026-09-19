@@ -94,8 +94,16 @@ export class GatewayService {
     }
     const record = await this.anchor.readRecord(decision.request_id);
     if (!record.requestHash || record.requestHash !== requestHash) throw new Error('INVALID_REQUEST_REFERENCE');
-    if (await this.anchor.chainTime() > record.decisionDeadline) throw new Error('DEADLINE_EXPIRED');
-    const recoveredTx = record.decisionHash === decisionHash && await this.anchor.findDecisionTx(decision.request_id, decisionHash);
+    const recovered = record.decisionHash === decisionHash;
+    if (recovered && (record.decisionAnchoredAt === null || record.decisionAnchoredAt > record.decisionDeadline)) {
+      throw new Error('DEADLINE_EXPIRED');
+    }
+    if (!recovered && await this.anchor.chainTime() > record.decisionDeadline) throw new Error('DEADLINE_EXPIRED');
+    const recoveredTx = recovered && await this.anchor.findDecisionTx(
+      decision.request_id,
+      decisionHash,
+      BigInt(bundle.verification_receipt.request_anchor_block),
+    );
     const result = recoveredTx
       ? { decisionTx: recoveredTx }
       : await this.anchor.anchorDecision(decision.request_id, decisionHash);

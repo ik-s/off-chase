@@ -65,6 +65,8 @@ declare
   v_policy_id text := p_bundle->'policy'->>'policy_id';
   v_decision jsonb := p_bundle->'decision';
 begin
+  perform pg_advisory_xact_lock(hashtextextended(v_policy_id, 1));
+  perform pg_advisory_xact_lock(hashtextextended(v_request_id, 2));
   if exists (select 1 from policies where policy_id = v_policy_id and record is distinct from p_bundle->'policy') then
     raise exception 'IMMUTABLE_POLICY_CONFLICT';
   end if;
