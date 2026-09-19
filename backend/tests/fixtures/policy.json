@@ -1,0 +1,13 @@
+{
+  "record": {
+    "schema_version": 1,
+    "policy_id": "payment-limit-v1",
+    "version": 1,
+    "asset": "USDC",
+    "max_amount_base_units": "4000000000",
+    "valid_from": "2026-09-19T00:00:00Z",
+    "enterprise_key_id": "enterprise-key-1",
+    "enterprise_signature": "0x6524790b1156428177dfc2fbbd7311413858b74be64d2169bfea160371d38582243c065f05cf9cf1fd048767f489ffcf8d5a7cfebe18e4123bb3797d4906f96a1c"
+  },
+  "expected_hash": "0x64d996575f0f50fd7b7815e94a6febaa21fb7b77f8948028aca7045d098d20d7"
+}

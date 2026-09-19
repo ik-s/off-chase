@@ -1,0 +1,8 @@
+backend/node_modules/
+backend/artifacts/
+backend/cache/
+backend/coverage/
+backend/.env
+frontend/node_modules/
+frontend/dist/
+.worktrees/

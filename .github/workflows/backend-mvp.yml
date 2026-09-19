@@ -1,0 +1,25 @@
+name: Backend MVP
+
+on:
+  push:
+    branches: [backend-mvp-ts]
+  pull_request:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: |
+            backend/package-lock.json
+            frontend/package-lock.json
+      - name: Backend checks
+        working-directory: backend
+        run: npm ci && npm run check
+      - name: Frontend checks
+        working-directory: frontend
+        run: npm ci && npm test && npm run build

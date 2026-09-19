@@ -1,0 +1,16 @@
+{
+  "record": {
+    "schema_version": 1,
+    "request_id": "REQ-001",
+    "created_at": "2026-09-19T01:00:00Z",
+    "asset": "USDC",
+    "amount_base_units": "4500000000",
+    "recipient": "0x1111111111111111111111111111111111111111",
+    "policy_id": "payment-limit-v1",
+    "policy_hash": "0x64d996575f0f50fd7b7815e94a6febaa21fb7b77f8948028aca7045d098d20d7",
+    "nonce": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "agent_key_id": "agent-key-1",
+    "agent_signature": "0x234cd958eea114fee1ad8edbe66a2a62152341bdafbec9fc7a5138066d4304410d71766f0c6e95f81e44725b1497a4c62f6787b058eaef5595075a319fb7d44a1b"
+  },
+  "expected_hash": "0xb8a6a3ac7d3065b64cb2bd084ae69b71e1a493e5a51378a3834a2089fd6ada36"
+}
