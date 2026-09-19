@@ -23,4 +23,15 @@ cd backend
 npx hardhat run scripts/deploy-anchor.ts --build-profile production --network sepolia
 ```
 
-The deploy script checks chain ID `11155111` and the contract owner. It has not yet been run on Sepolia. Gateway tests use a temporary in-memory implementation of the `EvidenceStore` port; the Supabase repository, Express routes, backend runtime key loading, demo endpoints and frontend API adapter are pending. No runtime credentials or private keys are committed.
+The deploy script checks chain ID `11155111` and the contract owner. It has not yet been run on Sepolia. Gateway tests use a temporary in-memory implementation of the `EvidenceStore` port; Express routes, backend runtime key loading, demo endpoints and frontend API adapter are pending. No runtime credentials or private keys are committed.
+
+## Supabase Evidence Store
+
+The `SupabaseEvidenceStore` adapter implements the existing `EvidenceStore` port without changing the Gateway or verifier. Apply `supabase/migrations/001_evidence_store.sql` to a Supabase project, then configure the server-side variables in `.env.example`:
+
+```text
+SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_SERVICE_ROLE_KEY=replace-me
+```
+
+Use `createSupabaseEvidenceStoreFromEnv()` from backend runtime wiring when that wiring is added. The service role key is required for server writes; never expose it to the frontend. Signed records and the evidence bundle are stored as JSONB, while request IDs remain unique relational keys. Deleting a row from `decisions` is intentionally independent from the already exported bundle.
