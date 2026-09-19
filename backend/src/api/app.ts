@@ -29,7 +29,9 @@ function domainError(handler: RequestHandler): RequestHandler {
       await handler(request, response, next);
     } catch (error) {
       const code = errorCode(error);
-      response.status(code === 'INTERNAL_ERROR' ? 500 : 400).json({ error: code });
+      const status = code === 'INTERNAL_ERROR' ? 500 :
+        ['REQUEST_ID_CONFLICT', 'REQUEST_ALREADY_ANCHORED', 'DECISION_ALREADY_ANCHORED'].includes(code) ? 409 : 400;
+      response.status(status).json({ error: code });
     }
   };
 }

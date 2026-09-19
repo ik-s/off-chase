@@ -1,5 +1,5 @@
 import { readFile } from 'node:fs/promises';
-import { createPublicClient, createWalletClient, defineChain, http, type Address } from 'viem';
+import { createPublicClient, createWalletClient, defineChain, http, parseAbi, type Address } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
 import { z } from 'zod';
 import { AnchorClient } from '../blockchain/anchorClient.ts';
@@ -27,13 +27,19 @@ export async function createRuntimeApp(env: NodeJS.ProcessEnv = process.env) {
   const publicClient = createPublicClient({ chain, transport: http(config.rpcUrl) });
   if (await publicClient.getChainId() !== config.chainId) throw new Error('WRONG_CHAIN_ID');
   const enterprise = privateKeyToAccount(config.enterprisePrivateKey);
+  const agent = privateKeyToAccount(config.agentPrivateKey);
   const verification = privateKeyToAccount(config.verificationPrivateKey);
   const institution = privateKeyToAccount(config.institutionPrivateKey);
   const writerAccount = privateKeyToAccount(config.anchorWriterPrivateKey);
   const registry = await loadRegistry(config.keyRegistryPath);
   requireRegistered(registry, 'enterprise-key-1', enterprise.address);
+  requireRegistered(registry, 'agent-key-1', agent.address);
   requireRegistered(registry, 'verification-key-1', verification.address);
   requireRegistered(registry, 'institution-key-1', institution.address);
+  const bytecode = await publicClient.getCode({ address: config.contractAddress });
+  if (!bytecode || bytecode === '0x') throw new Error('ANCHOR_CONTRACT_NOT_DEPLOYED');
+  const owner = await publicClient.readContract({ address: config.contractAddress, abi: parseAbi(['function owner() view returns (address)']), functionName: 'owner' });
+  if (owner.toLowerCase() !== writerAccount.address.toLowerCase()) throw new Error('ANCHOR_WRITER_NOT_OWNER');
   const writer = createWalletClient({ account: writerAccount, chain, transport: http(config.rpcUrl) });
   const anchor = new AnchorClient(publicClient, writer, config.contractAddress, config.chainId);
   const policy = await createPolicy(enterprise, { policyId: 'payment-limit-v1', validFrom: '2026-09-19T00:00:00Z', maxAmountBaseUnits: '4000000000' });
@@ -44,7 +50,7 @@ export async function createRuntimeApp(env: NodeJS.ProcessEnv = process.env) {
 
 async function main() {
   const { app, config } = await createRuntimeApp();
-  app.listen(config.port, () => process.stdout.write(`Trust404 API listening on ${config.port}\n`));
+  app.listen(config.port, '127.0.0.1', () => process.stdout.write(`Trust404 API listening on 127.0.0.1:${config.port}\n`));
 }
 
 if (import.meta.main) main().catch((error) => {

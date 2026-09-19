@@ -70,3 +70,16 @@ test('reports verifier results and maps known domain errors to client responses'
     assert.deepEqual(await verified.json(), { status: 'TAMPERED', errors: ['DECISION_HASH_MISMATCH'] });
   });
 });
+
+test('maps duplicate record conflicts to HTTP 409', async () => {
+  const duplicate = app({
+    gateway: { submitRequest: async () => { throw new Error('REQUEST_ID_CONFLICT'); }, submitDecision: async () => bundle },
+  });
+  await withServer(duplicate, async (url) => {
+    const response = await fetch(`${url}/api/requests`, {
+      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ request: {} }),
+    });
+    assert.equal(response.status, 409);
+    assert.deepEqual(await response.json(), { error: 'REQUEST_ID_CONFLICT' });
+  });
+});

@@ -7,6 +7,7 @@ export interface RuntimeConfig {
   contractAddress: Address;
   keyRegistryPath: string;
   enterprisePrivateKey: Hex;
+  agentPrivateKey: Hex;
   verificationPrivateKey: Hex;
   institutionPrivateKey: Hex;
   anchorWriterPrivateKey: Hex;
@@ -37,6 +38,7 @@ export function runtimeConfig(env: NodeJS.ProcessEnv): RuntimeConfig {
     port, rpcUrl, chainId, contractAddress: contractAddress as Address,
     keyRegistryPath: env.KEY_REGISTRY_PATH || 'key-registry.json',
     enterprisePrivateKey: privateKey(env, 'ENTERPRISE_PRIVATE_KEY'),
+    agentPrivateKey: privateKey(env, 'AGENT_PRIVATE_KEY'),
     verificationPrivateKey: privateKey(env, 'VERIFICATION_PRIVATE_KEY'),
     institutionPrivateKey: privateKey(env, 'INSTITUTION_PRIVATE_KEY'),
     anchorWriterPrivateKey: privateKey(env, 'ANCHOR_WRITER_PRIVATE_KEY'),

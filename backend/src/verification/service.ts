@@ -8,6 +8,11 @@ import {
 } from '../records/schemas.ts';
 import { createReceipt } from './receipt.ts';
 
+const ENTERPRISE_KEY_ID = 'enterprise-key-1';
+const AGENT_KEY_ID = 'agent-key-1';
+const VERIFICATION_KEY_ID = 'verification-key-1';
+const INSTITUTION_KEY_ID = 'institution-key-1';
+
 export interface EvidenceStore {
   getPolicy(policyId: string): Promise<PolicyRecord | null>;
   getBundle(requestId: string): Promise<EvidenceBundle | null>;
@@ -48,17 +53,21 @@ export class GatewayService {
     const policy = await this.store.getPolicy(request.policy_id);
     if (!policy || request.policy_hash !== hashRecord(policy, 'enterprise_signature') || request.asset !== policy.asset ||
         Date.parse(request.created_at) < Date.parse(policy.valid_from)) throw new Error('POLICY_MISMATCH');
-    if (!this.registry[policy.enterprise_key_id] ||
+    if (policy.enterprise_key_id !== ENTERPRISE_KEY_ID || !this.registry[ENTERPRISE_KEY_ID] ||
         !await verifyRecordSignature(policy, 'enterprise_signature', this.registry[policy.enterprise_key_id])) {
       throw new Error('INVALID_ENTERPRISE_SIGNATURE');
     }
-    if (!this.registry[request.agent_key_id] ||
+    if (request.agent_key_id !== AGENT_KEY_ID || !this.registry[AGENT_KEY_ID] ||
         !await verifyRecordSignature(request, 'agent_signature', this.registry[request.agent_key_id])) {
       throw new Error('INVALID_AGENT_SIGNATURE');
     }
     if ((await this.anchor.readRecord(request.request_id)).requestHash) throw new Error('REQUEST_ALREADY_ANCHORED');
     const requestAnchor = await this.anchor.anchorRequest(request.request_id, requestHash, request.policy_hash as `0x${string}`);
     const receipt = await createReceipt(this.verificationAccount, request, requestAnchor);
+    if (receipt.verification_key_id !== VERIFICATION_KEY_ID || !this.registry[VERIFICATION_KEY_ID] ||
+        !await verifyRecordSignature(receipt, 'verification_signature', this.registry[VERIFICATION_KEY_ID])) {
+      throw new Error('INVALID_VERIFICATION_SIGNATURE');
+    }
     const bundle = EvidenceBundleSchema.parse({
       schema_version: 1, policy, request, verification_receipt: receipt, decision: null,
       anchors: {
@@ -78,7 +87,7 @@ export class GatewayService {
     const requestHash = hashRecord(bundle.request, 'agent_signature');
     if (decision.request_hash !== requestHash || decision.policy_hash !== bundle.request.policy_hash ||
         decision.policy_id !== bundle.policy.policy_id) throw new Error('INVALID_REQUEST_REFERENCE');
-    if (!this.registry[decision.institution_key_id] ||
+    if (decision.institution_key_id !== INSTITUTION_KEY_ID || !this.registry[INSTITUTION_KEY_ID] ||
         !await verifyRecordSignature(decision, 'institution_signature', this.registry[decision.institution_key_id])) {
       throw new Error('INVALID_INSTITUTION_SIGNATURE');
     }
