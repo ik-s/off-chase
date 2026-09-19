@@ -3,7 +3,7 @@ import type { CaseDetail, EvidenceSelection } from './data/types.ts';
 import { evidenceLabels, StatusBadge, VerificationChecklist } from './components.tsx';
 
 function Fields({ values }: { values: [string, string][] }) {
-  return <dl className="detail-fields">{values.map(([label, value]) => <div key={label}><dt>{label}</dt><dd className={/Hash|Signature|signature|hash|Address|Transaction|Reference|^Request$|^Policy$|key_id|nonce|recipient/.test(label) ? 'mono' : undefined}>{value}</dd></div>)}</dl>;
+  return <dl className="detail-fields">{values.map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}</dl>;
 }
 export function RawJsonViewer({ record }: { record: unknown }) {
   return <details className="disclosure"><summary>View Raw Record <span>JSON</span></summary><pre tabIndex={0}>{JSON.stringify(record, null, 2)}</pre></details>;
@@ -42,8 +42,8 @@ export function EvidenceDetail({ detail, selected, mock }: { detail: CaseDetail;
   const technical = record ? Object.entries(record).filter(([key]) => /hash|signature|key_id|nonce|recipient/.test(key)) : [];
   const checks = report.checks.filter(check => check.records.includes(selected));
   return <div key={`${bundle.request.request_id}-${selected}`} id="evidence-detail" tabIndex={-1}>
-    <div className="column-heading"><h2>Inspector</h2></div>
-    <div className="record-heading"><h3>{evidenceLabels[selected]}</h3></div>
+    <div className="column-heading"><div><span className="eyebrow">INSPECT THE RECORD</span><h2>Evidence Detail</h2></div><span className="detail-icon" aria-hidden="true">⌕</span></div>
+    <div className="record-heading"><span className="record-kind">{selected === 'decision' ? '04' : selected === 'policy' ? '01' : selected === 'request' ? '02' : selected === 'verification_receipt' ? '03' : '05'}</span><div><span className="eyebrow">SELECTED EVIDENCE</span><h3>{evidenceLabels[selected]}</h3></div></div>
     <Fields values={fields[selected]} />
     {selected === 'decision' && !bundle.decision && <p className="context-note">Request는 관측됐지만 Decision은 없습니다. 아래 기한 검사에서 대기와 누락을 구분합니다.</p>}
     <section className="verification-section" aria-labelledby="checks-heading"><div className="section-top"><h3 id="checks-heading">Verification Checks</h3><span className="count">{checks.length}</span></div><p className="subdued">{mock ? '선택한 Record의 모의 검증 근거' : '선택한 Record의 검증 근거'}</p><VerificationChecklist checks={checks} /></section>

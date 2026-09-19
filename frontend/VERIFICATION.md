@@ -2,7 +2,7 @@
 
 ## Implemented
 
-Latest UI revision: shared audit workspace with persistent Header/Case List, direct Request/Decision/Evidence views, data-first summary, visible chronological record flow and adjacent Inspector. Home retains the requested headline with one sentence; technical values remain collapsed. Earlier guided/landing checks below document superseded layouts.
+Latest revision restores the original guided design and removes the audit-workbench stylesheet. Changes relative to that design are limited to shorter copy: one landing description, compact workflow captions, record-based page titles and concise action/result labels. Production build and all 14 tests pass.
 
 - Isolated React + Vite + TypeScript app in `frontend/`, using ordinary CSS, React hooks and Zod only.
 - Off-Chase introduction → explicit request selection → guided request → decision → evidence flow, separate payment and evidence statuses, deferred five-step Timeline and record-specific technical details. No request is selected automatically.
@@ -58,17 +58,7 @@ The revised interface was checked in the in-app browser after the user's request
 - Desktop picker and 390px introduction, picker and verification result have no horizontal document overflow.
 - Strict TypeScript/production build and all 14 tests pass, including updated assertions for explicit selection.
 
-## Audit workspace revision checks
-
-- Production build with strict TypeScript and all 14 existing tests pass; records, repository and business logic remain unchanged.
-- At 1440px, Case List, selected case and Inspector remain within the shared shell. Request amount, decision, policy and verification precede the Timeline.
-- Explicit Request/Decision/Evidence selection has no sequential gating; REJECT and VERIFIED remain independent.
-- TAMPERED filtering clears an incompatible selection; selecting REQ-002 shows LIMIT_EXCEEDED → KYT_RISK and failed checks.
-- Policy and Verification Receipt selections update the Inspector. Hash/signature, on-chain values and Raw JSON start collapsed; keyboard Enter expands Raw JSON.
-- File Verifier retains the Case List and focuses its visible heading. Browser logs contain a Vite development WebSocket connection failure; tested application interactions completed successfully.
-- At 390px, the evidence view has no horizontal overflow. Temporary viewport overrides were reset.
-
-## Download verification limitation
+## Verification limitation
 
 The download button triggers the Blob download path and displays the requested filename, but the in-app browser's download event timed out and no saved file was confirmed. Actual browser file-save completion and uploading that exact saved file remain unverified. Repository-level download content and round-trip verification pass, and the equivalent checked-in normal fixture was uploaded successfully through the UI. Confirm file-save completion in a normal browser before a live demo.
 

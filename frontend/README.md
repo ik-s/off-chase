@@ -14,19 +14,21 @@ npm test
 npm run build
 ```
 
-The app opens on a compact Off-Chase introduction alongside the persistent Case List. Select a request directly; no case is selected or loaded automatically. `REQ-001` is one available example: 4,500 USDC → 4,000 USDC limit → REJECT / LIMIT_EXCEEDED → VERIFIED.
+The app opens on an Off-Chase service introduction. Select “요청 선택하고 시작하기”, then explicitly choose a request. No case is selected or loaded automatically. `REQ-001` is one available example: 4,500 USDC → 4,000 USDC limit → REJECT / LIMIT_EXCEEDED → VERIFIED.
 
-## Investigation workspace
+## Guided experience
 
-The shared header and Case List remain present across Home, case detail, File Verifier and demos. The Off-Chase logo returns to Home. The navy palette and original SVG brand are retained; typography emphasizes amounts over headings, with monospace reserved for identifiers and technical values.
+The original landing, request picker and step-by-step card layout are restored. Copy is shortened to record-oriented headings (`REQ-001 · Request / Decision / Evidence`), concise field labels and actions. The landing retains its headline and emblem with a single description; workflow captions remain without explanatory paragraphs. Typography, timestamps and disclosure behavior are unchanged.
 
-1. **Request**: amount, institution decision, applied policy and verification summary, followed by recorded timestamps.
-2. **Decision**: decision and reason code, tamper comparison when available, and the decision deadline.
-3. **Evidence**: current verification status, four checklist groups and an explicit re-verification action.
+The interface follows service introduction → request picker → the progressive review below. The Off-Chase logo in the header returns to the introduction; the same original SVG is used as the favicon. Body text and primary actions are approximately 20px, with 14–16px supporting text and responsive adjustments.
 
-Views are freely accessible without sequential unlocking. The visible Request → Receipt → Decision → Evidence timeline selects the adjacent Inspector. Applied Policy opens from the summary. The timeline distinguishes Request and Decision anchor times and never invents a Decision creation timestamp. Hash, signature, transaction and Raw JSON values remain collapsed. Downloads, files and demos retain their existing repository behavior.
+1. **요청 확인**: compare the request amount and policy limit; one primary action opens the institution's decision.
+2. **판단 이해**: read the recorded decision and reason; explicitly start evidence verification.
+3. **증거 검증**: see the returned status and four human-readable groups of checks. Full checks, Timeline, Record details, hashes and JSON are optional disclosures.
 
-`GuidedCase.tsx` owns presentation-only view and evidence selection. Verification still goes through `useWorkspace` and the injected repository. Explicit re-verification results are labelled as snapshots; use “다시 검증” after a PROCESSING deadline. Filtering clears an incompatible selection without auto-selecting another request.
+Downloads and additional scenarios appear after verification. Case selection and file verification have separate focused views. Opening and returning from a secondary view preserves progress; choosing a different case or creating a new demo starts at step 1. Filtering the case picker does not select a case until the user clicks one. Later steps unlock as the user progresses, and keyboard focus follows the current heading.
+
+`GuidedCase.tsx` owns presentation-only step state. Verification still goes through `useWorkspace` and the injected repository. A PROCESSING result is explicitly a verification-time snapshot; use “검증 결과 다시 확인” after the simulated deadline to retrieve the updated result.
 
 ## Boundaries
 
@@ -65,7 +67,7 @@ The document does not specify the absent-decision encoding of `anchors.decision_
 
 `npm test` covers base-unit precision, exact fixture round trips, unknown/invalid input, all statuses, deadline boundaries, retained evidence after deletion, mutation isolation, filter selection, stale responses, and the replaceable repository boundary. `npm run build` includes strict type checking.
 
-Browser checks cover persistent navigation, direct view switching, explicit Case selection, Timeline/Inspector linkage, collapsed technical data, filtering, verification and desktop/narrow layouts. Build output is static and can be served with `npm run preview`.
+Browser checks cover step-by-step progression, deferred tools, preserved progress, explicit Case selection, optional Timeline/technical data, demos, file upload, keyboard focus and desktop/narrow layouts. Build output is static and can be served with `npm run preview`.
 
 Sample upload files live in `tests/fixtures/`: `normal.json` reproduces the initial VERIFIED fixture, `unknown.json` is structurally valid but unsupported, and `malformed.json` tests invalid JSON feedback.
 

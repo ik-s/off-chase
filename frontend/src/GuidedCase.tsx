@@ -1,22 +1,24 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { CaseDetail, EvidenceSelection, VerificationCheckViewModel, VerificationOutcome } from './data/types.ts';
-import { formatUsdc, utc } from './data/presentation.ts';
+import { formatUsdc, statusDescriptions, utc } from './data/presentation.ts';
 import { EvidenceTimeline, StatusBadge, VerificationChecklist } from './components.tsx';
 import { EvidenceDetail } from './EvidenceDetail.tsx';
 
+const steps = ['요청 확인', '판단 확인', '증거 검증'];
 const groups = [
-  { title: '요청 출처', ids: ['schema', 'key', 'agent-signature', 'request-hash', 'references'] },
-  { title: '적용 정책', ids: ['policy-signature', 'policy-hash'] },
-  { title: '기관 판단', ids: ['institution-signature', 'policy'] },
-  { title: '기록 무결성', ids: ['request-anchor', 'decision-hash', 'anchor', 'deadline'] },
+  { title: '요청 출처', description: '공식 키 · 서명 · 요청 참조', ids: ['schema', 'key', 'agent-signature', 'request-hash', 'references'] },
+  { title: '적용 정책', description: '정책 서명 · Hash 연결', ids: ['policy-signature', 'policy-hash'] },
+  { title: '기관 판단', description: '기관 서명 · 정책 일치', ids: ['institution-signature', 'policy'] },
+  { title: '기록 무결성', description: 'Anchor · Hash · 결정 기한', ids: ['request-anchor', 'decision-hash', 'anchor', 'deadline'] },
 ];
 
 function CheckSummary({ checks }: { checks: VerificationCheckViewModel[] }) {
-  return <ul className="audit-checks">{groups.map(group => {
+  return <ul className="flow-checks">{groups.map(group => {
     const relevant = checks.filter(check => group.ids.includes(check.id));
     const failed = relevant.find(check => check.state === 'failed');
     const passed = relevant.length === group.ids.length && relevant.every(check => check.state === 'passed');
-    return <li key={group.title}><strong>{group.title}</strong><span className={failed ? 'text-tampered' : passed ? 'text-verified' : 'text-processing'}>{failed ? '불일치' : passed ? '통과' : '확인 대기'}</span>{failed && <p>{failed.detail}</p>}</li>;
+    const state = failed ? 'failed' : passed ? 'passed' : 'pending';
+    return <li key={group.title} className={`flow-check-${state}`}><span className="flow-check-symbol" aria-hidden="true">{failed ? '!' : passed ? '✓' : '—'}</span><div><strong>{group.title}</strong><p>{failed?.detail ?? group.description}</p></div><span className="flow-check-label">{failed ? '불일치' : passed ? '확인됨' : '확인 대기'}</span></li>;
   })}</ul>;
 }
 
@@ -30,60 +32,97 @@ interface Props {
 }
 
 export function GuidedCase({ detail, mock, onVerify, onDownload, downloading, onDemo }: Props) {
-  const [view, setView] = useState<'Request' | 'Decision' | 'Evidence'>('Request');
-  const [evidence, setEvidence] = useState<EvidenceSelection>('request');
+  const [step, setStep] = useState(0);
+  const [furthest, setFurthest] = useState(0);
   const [result, setResult] = useState<VerificationOutcome | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const lock = useRef(false);
+  const [technical, setTechnical] = useState(false);
+  const [evidence, setEvidence] = useState<EvidenceSelection>(detail.bundle.decision ? 'decision' : 'verification_receipt');
+  const heading = useRef<HTMLHeadingElement>(null);
+  const previousStep = useRef(0);
+  const verifyLock = useRef(false);
   const { bundle } = detail;
-  const report = result?.kind === 'report' ? result.report : detail.report;
-  const inspected = { ...detail, report };
+  const requestAmount = formatUsdc(bundle.request.amount_base_units);
+  const limit = formatUsdc(bundle.policy.max_amount_base_units);
+  const rejected = bundle.decision?.decision === 'REJECT';
+
+  useEffect(() => {
+    if (previousStep.current !== step) {
+      heading.current?.focus({ preventScroll: true });
+      window.scrollTo({ top: 0, behavior: 'instant' });
+      previousStep.current = step;
+    }
+  }, [step]);
+
+  const advance = (next: number) => { setFurthest(value => Math.max(value, next)); setStep(next); };
   const verify = async () => {
-    if (lock.current) return;
-    lock.current = true; setBusy(true); setError(null);
+    if (verifyLock.current) return;
+    verifyLock.current = true;
+    setBusy(true); setError(null); setResult(null); advance(2);
     try { setResult(await onVerify()); }
-    catch (cause) { setError(cause instanceof Error ? cause.message : '검증 결과를 불러올 수 없습니다.'); }
-    finally { lock.current = false; setBusy(false); }
-  };
-  const changeView = (next: typeof view) => {
-    setView(next);
-    setEvidence(next === 'Request' ? 'request' : next === 'Decision' ? 'decision' : 'anchors');
+    catch (cause) { setError(cause instanceof Error ? cause.message : '검증 결과를 불러올 수 없습니다. 다시 시도해 주세요.'); }
+    finally { verifyLock.current = false; setBusy(false); }
   };
 
-  return <div className="case-investigation">
-    <section className="audit-case" aria-label="사건 상세">
-      <div className="audit-title"><h1 tabIndex={-1}><span className="mono">{bundle.request.request_id}</span> · {view}</h1>{view === 'Evidence' && <StatusBadge status={report.status} />}</div>
-      <dl className="audit-summary">
-        <div><dt>Request Amount</dt><dd className="audit-amount">{formatUsdc(bundle.request.amount_base_units)} <small>USDC</small></dd></div>
-        <div><dt>Institution Decision</dt><dd>{bundle.decision?.decision ?? 'NO DECISION'}</dd><span className="reason-code">{bundle.decision?.reason_code ?? '결정 기록 없음'}</span></div>
-        <div><dt>Applied Policy</dt><dd>{formatUsdc(bundle.policy.max_amount_base_units)} <small>USDC</small></dd><button className="text-button" onClick={() => setEvidence('policy')}>Policy v{bundle.policy.version} ↗</button></div>
-        <div><dt>Verification</dt><dd><StatusBadge status={report.status} /></dd><span className="audit-meta">{mock ? 'Mock result' : 'Verification result'}</span></div>
+  return <>
+    <nav className="flow-steps" aria-label="사건 확인 단계"><ol>{steps.map((label, index) => <li key={label}><button aria-current={step === index ? 'step' : undefined} disabled={index > furthest || busy} onClick={() => setStep(index)}><span className="flow-step-number">{index < step ? '✓' : String(index + 1).padStart(2, '0')}</span><span>{label}</span></button></li>)}</ol></nav>
+
+    {step === 0 && <section aria-labelledby="step-heading">
+      <div className="flow-intro"><span className="eyebrow">STEP 01</span><h1 ref={heading} tabIndex={-1} id="step-heading">{bundle.request.request_id} · Request</h1></div>
+      <div className="flow-card request-comparison">
+        <div className="request-side"><span className="field-label">AGENT REQUEST</span><span className="flow-amount">{requestAmount}<small>USDC</small></span><p>요청 금액</p><span className="mono request-reference">{bundle.request.request_id}</span></div>
+        <div className="comparison-divider" aria-hidden="true"><span>→</span></div>
+        <div className="policy-side"><span className="field-label">ENTERPRISE POLICY</span><span className="flow-amount">{limit}<small>USDC</small></span><p>1회 결제 한도</p><span className="request-reference">적용 정책 · v{bundle.policy.version}</span></div>
+        <div className="request-route"><span>Agent</span><span aria-hidden="true">→</span><strong>Verification Layer <span>요청 관측</span></strong><span aria-hidden="true">→</span><span>Institution Wallet</span></div>
+      </div>
+      <dl className="record-times" aria-label="요청과 정책 시각">
+        <div><dt>요청 생성 시각</dt><dd><time dateTime={bundle.request.created_at}>{utc(Date.parse(bundle.request.created_at) / 1000)}</time></dd></div>
+        <div><dt>정책 적용 시작</dt><dd><time dateTime={bundle.policy.valid_from}>{utc(Date.parse(bundle.policy.valid_from) / 1000)}</time></dd></div>
       </dl>
-      <nav className="audit-tabs" aria-label="사건 보기">{(['Request', 'Decision', 'Evidence'] as const).map(item => <button key={item} aria-pressed={view === item} onClick={() => changeView(item)}>{item}</button>)}</nav>
-      {view === 'Request' && <dl className="record-times" aria-label="요청 시각">
-        <div><dt>Request created · UTC</dt><dd><time dateTime={bundle.request.created_at}>{utc(Date.parse(bundle.request.created_at) / 1000)}</time></dd></div>
-        <div><dt>Policy valid from · UTC</dt><dd><time dateTime={bundle.policy.valid_from}>{utc(Date.parse(bundle.policy.valid_from) / 1000)}</time></dd></div>
-      </dl>}
-      {view === 'Decision' && <section className="audit-decision" aria-label="기관 판단">
-        <strong>{bundle.decision?.decision ?? 'NO DECISION'}</strong><span className="reason-code">{bundle.decision?.reason_code ?? '결정 기록 없음'}</span>
-        {detail.change && <p className="change-comparison">{detail.change.before} → {detail.change.after}</p>}
-        <p className="audit-meta">결정 제출 기한 · {utc(bundle.verification_receipt.decision_deadline)}</p>
-        <p className="audit-meta">판단 생성 시각: Record에 포함되지 않음</p>
-        {!detail.institutionRecordPresent && bundle.decision && <p className="context-note">기관 DB 기록 없음 · 보관된 Evidence Bundle의 판단</p>}
-      </section>}
-      {view === 'Evidence' && <section aria-label="검증 결과" className="audit-verification">
-        <div className="section-top"><h2>Verification Checklist</h2><button disabled={busy} onClick={() => void verify()}>{busy ? '검증 중…' : '다시 검증'}</button></div>
-        <CheckSummary checks={report.checks} />
-        <details className="all-checks"><summary>전체 검증 항목 · {report.checks.length}</summary><VerificationChecklist checks={report.checks} /></details>
-        {error && <p role="alert" className="error-message">{error}</p>}
-        {result?.kind === 'unsupported' && <p role="status" className="context-note">{result.message}</p>}
-        <p className="audit-meta">{mock ? '모의 검증' : '검증 결과'} · {result?.kind === 'report' ? '재검증 시점의 결과' : '조회된 검증 결과'}</p>
-        {report.status === 'PROCESSING' && <p className="audit-meta">결정 기한 {utc(bundle.verification_receipt.decision_deadline)} · 기한 이후 다시 검증</p>}
-      </section>}
-      <EvidenceTimeline detail={inspected} selected={evidence} onSelect={setEvidence} />
-      <div className="audit-actions"><button disabled={downloading} onClick={onDownload}>{downloading ? '준비 중…' : 'Evidence 다운로드'}</button><button className="text-button" onClick={onDemo}>Demo Controls</button></div>
-    </section>
-    <aside className="audit-inspector" aria-label="Evidence Inspector"><EvidenceDetail detail={inspected} selected={evidence} mock={mock} /></aside>
-  </div>;
+      {mock && <p className="timestamp-note">예시 시각 · UTC</p>}
+      <div className="flow-actions"><button className="primary-button" onClick={() => advance(1)}>Decision 확인 <span aria-hidden="true">→</span></button></div>
+    </section>}
+
+    {step === 1 && <section aria-labelledby="step-heading">
+      <div className="flow-intro"><span className="eyebrow">STEP 02</span><h1 ref={heading} tabIndex={-1} id="step-heading">{bundle.request.request_id} · Decision</h1></div>
+      <div className="flow-card decision-focus">
+        <div className="decision-context"><span>{requestAmount} USDC 요청</span><span aria-hidden="true">→</span><span>1회 한도 {limit} USDC</span></div>
+        <span className="field-label">INSTITUTION DECISION</span>
+        <div className="decision-word">{bundle.decision?.decision ?? 'NO DECISION'}<span>{bundle.decision ? rejected ? '결제 거절' : '결제 승인' : '결정 기록 없음'}</span></div>
+        <div className="decision-explanation"><h2>{bundle.decision?.reason_code === 'LIMIT_EXCEEDED' ? '1회 결제 한도 초과' : bundle.decision?.reason_code === 'KYT_RISK' ? '기록된 사유: KYT 위험' : !bundle.decision ? 'Decision Record 없음' : '기관 판단'}</h2><code>{bundle.decision?.reason_code ?? '—'}</code></div>
+        {detail.change && <div className="change-comparison"><div><span className="field-label">기존 사유</span><code>{detail.change.before}</code></div><span aria-hidden="true">→</span><div><span className="field-label">현재 사유</span><code>{detail.change.after}</code></div></div>}
+        {!bundle.decision && <p className="context-note">결정 기한 {utc(bundle.verification_receipt.decision_deadline)} · {mock ? '모의 Chain Time' : 'Chain Time'} 기준</p>}
+        {!detail.institutionRecordPresent && bundle.decision && <p className="context-note">기관 DB에는 현재 기록이 없습니다. 이 판단은 이전에 확보한 Evidence Bundle에 남아 있습니다.</p>}
+      </div>
+      <dl className="record-times" aria-label="요청 관측과 결정 기한">
+        <div><dt>요청 관측 시각</dt><dd><time dateTime={new Date(bundle.verification_receipt.observed_at * 1000).toISOString()}>{utc(bundle.verification_receipt.observed_at)}</time></dd></div>
+        <div><dt>결정 제출 기한</dt><dd><time dateTime={new Date(bundle.verification_receipt.decision_deadline * 1000).toISOString()}>{utc(bundle.verification_receipt.decision_deadline)}</time></dd></div>
+      </dl>
+      <p className="timestamp-note">{mock ? '모의 시각 · UTC' : 'UTC'} · 판단 생성 시각 미제공</p>
+      <div className="flow-actions"><button className="text-button" onClick={() => setStep(0)}>← 요청 확인</button><button className="primary-button" onClick={() => void verify()}>증거 검증 <span aria-hidden="true">→</span></button></div>
+    </section>}
+
+    {step === 2 && <section aria-labelledby="step-heading">
+      <div className="flow-intro"><span className="eyebrow">STEP 03</span><h1 ref={heading} tabIndex={-1} id="step-heading">{bundle.request.request_id} · Evidence</h1></div>
+      {busy && <div className="flow-card verification-loading" role="status"><span className="verification-loader" aria-hidden="true" /><h2>증거를 확인하고 있습니다.</h2><p>요청 → 정책 → 판단 → 기록의 무결성</p></div>}
+      {error && <div className="error-message" role="alert">{error}<button onClick={() => void verify()}>다시 시도</button></div>}
+      {result?.kind === 'unsupported' && <div className="context-note" role="status">{result.message}</div>}
+      {result?.kind === 'report' && <>
+        <div className="flow-card result-focus">
+          <div className="result-heading"><span className={`result-symbol text-${result.report.status.toLowerCase()}`} aria-hidden="true">{result.report.status === 'VERIFIED' ? '✓' : result.report.status === 'PROCESSING' ? '◷' : '!'}</span><div><StatusBadge status={result.report.status} /><h2>{result.report.status === 'VERIFIED' ? '증거 검증 완료' : result.report.status === 'PROCESSING' ? '결정 대기' : result.report.status === 'MISSING' ? '결정 기록 누락' : result.report.status === 'TAMPERED' ? '기록 불일치' : '유효하지 않은 증거'}</h2><p>{statusDescriptions[result.report.status]}</p></div></div>
+          <CheckSummary checks={result.report.checks} />
+          <details className="all-checks"><summary>전체 검증 항목 보기 <span>{result.report.checks.length}</span></summary><VerificationChecklist checks={result.report.checks} /></details>
+        </div>
+        {result.report.status === 'VERIFIED' && <p className="flow-result-note">{bundle.decision?.decision === 'REJECT' ? '결제는 거절됐지만, 그 판단의 증거는 검증됐습니다.' : 'VERIFIED는 실제 결제 실행이 아니라 증거의 검증 상태입니다.'}{mock && ' 이 결과는 Mock 시뮬레이션입니다.'}</p>}
+        {result.report.status === 'PROCESSING' && <div className="context-note">확인 당시 결과입니다. 기한이 지난 뒤 다시 확인해 주세요.<button className="text-button" onClick={() => void verify()}>검증 결과 다시 확인 →</button></div>}
+        {!detail.institutionRecordPresent && bundle.decision && <p className="context-note">현재 기관 DB에 기록이 없어도 보관된 Evidence로 과거 판단을 확인합니다. 삭제 행위 자체를 증명하지 않습니다.</p>}
+        <div className="flow-actions"><button className="text-button" onClick={() => setStep(1)}>← 판단 다시 보기</button><button className="primary-button" disabled={downloading} onClick={onDownload}>{downloading ? '준비 중…' : '증거 파일 다운로드'} <span aria-hidden="true">↓</span></button></div>
+        <div className="flow-next"><div><span className="eyebrow">DEMO</span><h3>시나리오 비교</h3></div><button onClick={onDemo}>Demo Controls →</button></div>
+        <button className="technical-toggle text-button" aria-expanded={technical} aria-controls="technical-records" onClick={() => setTechnical(value => !value)}>{technical ? '기술 증거 접기 −' : '기술 증거 자세히 보기 +'}<span>Timeline · Hash · Signature · Raw JSON</span></button>
+        {technical && <div className="technical-workspace" id="technical-records"><EvidenceTimeline detail={detail} selected={evidence} onSelect={setEvidence} /><EvidenceDetail detail={detail} selected={evidence} mock={mock} /></div>}
+      </>}
+      {!busy && (error || result?.kind === 'unsupported') && <button className="text-button" onClick={() => setStep(1)}>← 판단으로 돌아가기</button>}
+    </section>}
+  </>;
 }
