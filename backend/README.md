@@ -43,3 +43,16 @@ npm run smoke:usdc -- --verify
 ```
 
 If the intent remains `PENDING` without a hash after an interrupted broadcast, inspect the sender's nonce and transactions on Sepolia before any manual retry. The script refuses a wrong chain ID, missing gas or USDC, a failed simulation, an unrelated event, and unexpected balance changes. Its result is a token transfer check, separate from the DecisionAnchor evidence proof; the MVP contract does not settle payments.
+
+To test the approved **rejection evidence flow on Sepolia**, first deploy `DecisionAnchor` using the funded Anchor Writer and the deployment command above. Then run the gateway against that contract, using a new empty output directory:
+
+```bash
+RPC_URL=https://ethereum-sepolia-rpc.publicnode.com \
+SMOKE_WALLET_PATH=/absolute/path/to/test-wallet.json \
+ANCHOR_CONTRACT_ADDRESS=0xYourDeployedDecisionAnchor \
+SMOKE_RECIPIENT=0xYourOtherTestAddress \
+SMOKE_EVIDENCE_DIR=/absolute/path/to/new-evidence-output \
+npm run smoke:evidence
+```
+
+The script checks chain ID, deployed contract owner and gas balance before writing to the chain. It signs a 4,500 USDC request against a 4,000 USDC policy, anchors the request and `REJECT / LIMIT_EXCEEDED` decision, writes the Evidence Bundle and public key registry, and verifies those files with a separate read-only chain client. The evidence run itself never transfers USDC. If the network misses the contract's 30-second decision window, the request-only bundle remains on disk for later independent `MISSING` verification.
