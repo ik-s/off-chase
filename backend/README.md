@@ -34,4 +34,12 @@ SMOKE_RECIPIENT=0xYourOtherTestAddress \
 npm run smoke:usdc
 ```
 
-The script refuses a wrong chain ID, missing gas or USDC, a failed simulation, an unrelated event, and unexpected balance changes. Its result is a token transfer check, separate from the DecisionAnchor evidence proof; the MVP contract does not settle payments.
+The transfer amount is fixed at 1 test USDC. Before broadcast, the script creates a one-use intent file next to the wallet JSON and refuses to send again while that file exists. It records the broadcast transaction hash before waiting for a receipt. If receipt or balance verification fails after broadcast, resume without signing another transaction:
+
+```bash
+RPC_URL=https://ethereum-sepolia-rpc.publicnode.com \
+SMOKE_INTENT_PATH=/absolute/path/to/test-wallet.json.usdc-smoke-intent.json \
+npm run smoke:usdc -- --verify
+```
+
+If the intent remains `PENDING` without a hash after an interrupted broadcast, inspect the sender's nonce and transactions on Sepolia before any manual retry. The script refuses a wrong chain ID, missing gas or USDC, a failed simulation, an unrelated event, and unexpected balance changes. Its result is a token transfer check, separate from the DecisionAnchor evidence proof; the MVP contract does not settle payments.
