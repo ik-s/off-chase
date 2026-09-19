@@ -1,0 +1,14 @@
+{
+  "record": {
+    "schema_version": 1,
+    "request_id": "REQ-001",
+    "request_hash": "0xb8a6a3ac7d3065b64cb2bd084ae69b71e1a493e5a51378a3834a2089fd6ada36",
+    "policy_id": "payment-limit-v1",
+    "policy_hash": "0x64d996575f0f50fd7b7815e94a6febaa21fb7b77f8948028aca7045d098d20d7",
+    "decision": "REJECT",
+    "reason_code": "LIMIT_EXCEEDED",
+    "institution_key_id": "institution-key-1",
+    "institution_signature": "0xadab1e0135922dcf1d49981dad876e591b09c714b536e916f8871bbe992f63036a6d2d066bfee8ceafbf6e26a780c913ff41a48af55966d994f34c482b9cddfa1b"
+  },
+  "expected_hash": "0x53023fc3beb8c6e9751261c4871e2099cac3ed4aa1aafdd146d38e08584287a7"
+}
