@@ -1,4 +1,7 @@
 import assert from 'node:assert/strict';
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { it } from 'node:test';
 import hre from 'hardhat';
 import { privateKeyToAccount } from 'viem/accounts';
@@ -10,6 +13,7 @@ import { decideRequest } from '../src/institution/mockWallet.ts';
 import { hashRecord, signRecord } from '../src/crypto/records.ts';
 import { DecisionSchema, EvidenceBundleSchema } from '../src/records/schemas.ts';
 import { verifyEvidence } from '../src/verification/verifier.ts';
+import { verifyEvidenceFile } from '../src/verification/verifyFile.ts';
 
 const enterprise = privateKeyToAccount(`0x${'0'.repeat(63)}1`);
 const agent = privateKeyToAccount(`0x${'0'.repeat(63)}2`);
@@ -101,4 +105,24 @@ it('rejects bundle transaction references that point to different anchor operati
   }, registry, anchor);
   assert.equal(wrongDecision.status, 'INVALID');
   assert.ok(wrongDecision.errors.includes('INVALID_REQUEST_REFERENCE'));
+});
+
+it('verifies a downloaded JSON file with a separate static registry and read-only chain reader', async () => {
+  const { independentReader, bundle } = await setup();
+  const directory = await mkdtemp(join(tmpdir(), 'off-chase-verifier-'));
+  try {
+    const bundlePath = join(directory, 'evidence-bundle-REQ-001.json');
+    const registryPath = join(directory, 'key-registry.json');
+    await writeFile(bundlePath, JSON.stringify(bundle));
+    await writeFile(registryPath, JSON.stringify(registry));
+    assert.deepEqual(await verifyEvidenceFile(bundlePath, registryPath, independentReader), {
+      status: 'VERIFIED', errors: [],
+    });
+    await writeFile(registryPath, JSON.stringify({ ...registry, 'institution-key-1': agent.address }));
+    const wrongRegistry = await verifyEvidenceFile(bundlePath, registryPath, independentReader);
+    assert.equal(wrongRegistry.status, 'INVALID');
+    assert.ok(wrongRegistry.errors.includes('INVALID_INSTITUTION_SIGNATURE'));
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
 });

@@ -24,11 +24,19 @@ export interface AnchorRecord {
 }
 
 export class ChainAnchorReader {
+  protected readonly reader: PublicClient;
+  readonly address: Address;
+  readonly chainId: number;
+
   constructor(
-    protected readonly reader: PublicClient,
-    readonly address: Address,
-    readonly chainId: number,
-  ) {}
+    reader: PublicClient,
+    address: Address,
+    chainId: number,
+  ) {
+    this.reader = reader;
+    this.address = address;
+    this.chainId = chainId;
+  }
 
   async readRecord(requestId: string): Promise<AnchorRecord> {
     const [requestHash, policyHash, requestAnchoredAt, decisionDeadline, decisionHash, decisionAnchoredAt] =
@@ -84,9 +92,12 @@ export class ChainAnchorReader {
 }
 
 export class AnchorClient extends ChainAnchorReader {
-  constructor(reader: PublicClient, private readonly writer: WalletClient, address: Address, chainId: number) {
+  private readonly writer: WalletClient;
+
+  constructor(reader: PublicClient, writer: WalletClient, address: Address, chainId: number) {
     super(reader, address, chainId);
     if (!writer.account) throw new Error('ANCHOR_WRITER_MISSING');
+    this.writer = writer;
   }
 
   async anchorRequest(requestId: string, requestHash: Hex, policyHash: Hex) {

@@ -14,6 +14,8 @@ npm run check
 
 The local Hardhat tests exercise the chain contract, normal `REJECT / LIMIT_EXCEEDED`, altered decision, absent decision before and after deadline, unknown keys and wrong transaction references. Test keys are deterministic fixtures and must never be used on Sepolia.
 
+The independent CLI reads an exported Bundle and a separate public key registry. Copy `key-registry.example.json` to `key-registry.json` and replace every address with the deployed role address. Export `RPC_URL`, `CHAIN_ID`, and `ANCHOR_CONTRACT_ADDRESS`; then run `npm run verify -- evidence-bundle-REQ-001.json`. The example addresses belong only to deterministic local tests. The CLI rejects a mismatched RPC chain ID and does not require private keys or Institution DB access.
+
 Sepolia configuration uses the environment variable names in `.env.example`. With a funded Anchor Writer key and RPC URL, deployment is:
 
 ```bash
@@ -21,4 +23,4 @@ cd backend
 npx hardhat run scripts/deploy-anchor.ts --build-profile production --network sepolia
 ```
 
-The deploy script checks chain ID `11155111` and the contract owner. It has not yet been run on Sepolia. The Supabase repositories, Express routes, runtime key registry, independent verifier CLI, four demo endpoints and frontend API adapter are pending. No runtime credentials or private keys are committed.
+The deploy script checks chain ID `11155111` and the contract owner. It has not yet been run on Sepolia. The Supabase repositories, Express routes, backend runtime key loading, demo endpoints and frontend API adapter are pending. No runtime credentials or private keys are committed.
