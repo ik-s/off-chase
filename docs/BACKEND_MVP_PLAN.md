@@ -17,4 +17,4 @@ The TypeScript backend separates signed records, the mandatory verification gate
 
 ## Current implementation
 
-Milestone 1 and the local-chain portion of milestone 2 are implemented. The pure domain roles, signed receipt, read-only chain reader and verifier are implemented and tested on a local Hardhat chain. Sepolia deployment, Supabase persistence, Express API, CLI and frontend adapter remain. Every milestone gets a fresh comparison with the latest remote development document before implementation and a full relevant test and typecheck run before completion claims.
+Milestone 1 and the local-chain portion of milestone 2 are implemented. The domain roles, Gateway service, signed receipt, read-only chain reader, exported-file CLI and verifier are implemented and tested on a local Hardhat chain. Gateway tests use an in-memory `EvidenceStore`; Supabase persistence, Express API, frontend adapter and Sepolia deployment remain. Every milestone gets a fresh comparison with the latest remote development document before implementation and a full relevant test and typecheck run before completion claims.

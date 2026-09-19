@@ -56,6 +56,7 @@ export async function verifyEvidence(
   const requestHash = hashRecord(request, 'agent_signature');
   const decisionHash = decision ? hashRecord(decision, 'institution_signature') : null;
   if (request.policy_hash !== policyHash || request.policy_id !== policy.policy_id || request.asset !== policy.asset ||
+      Date.parse(request.created_at) < Date.parse(policy.valid_from) ||
       receipt.policy_hash !== policyHash || (decision && (decision.policy_hash !== policyHash || decision.policy_id !== policy.policy_id))) {
     errors.push('POLICY_MISMATCH');
   }

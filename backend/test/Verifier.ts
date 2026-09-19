@@ -26,14 +26,14 @@ const registry = {
   'verification-key-1': gatewaySigner.address,
 };
 
-async function setup(withDecision = true) {
+async function setup(withDecision = true, validFrom = '2026-09-19T00:00:00Z') {
   const { viem, networkHelpers } = await hre.network.create();
   const [writer] = await viem.getWalletClients();
   const publicClient = await viem.getPublicClient();
   const contract = await viem.deployContract('DecisionAnchor', [writer.account.address]);
   const anchor = new AnchorClient(publicClient, writer, contract.address, await publicClient.getChainId());
   const policy = await createPolicy(enterprise, {
-    policyId: 'payment-limit-v1', validFrom: '2026-09-19T00:00:00Z', maxAmountBaseUnits: '4000000000',
+    policyId: 'payment-limit-v1', validFrom, maxAmountBaseUnits: '4000000000',
   });
   const request = await createRequest(agent, policy, {
     requestId: 'REQ-001', createdAt: '2026-09-19T01:00:00Z', amountBaseUnits: '4500000000',
@@ -125,4 +125,11 @@ it('verifies a downloaded JSON file with a separate static registry and read-onl
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
+});
+
+it('does not accept a policy whose valid_from is after the signed request', async () => {
+  const { independentReader, bundle } = await setup(false, '2026-09-20T00:00:00Z');
+  const result = await verifyEvidence(bundle, registry, independentReader);
+  assert.equal(result.status, 'INVALID');
+  assert.ok(result.errors.includes('POLICY_MISMATCH'));
 });

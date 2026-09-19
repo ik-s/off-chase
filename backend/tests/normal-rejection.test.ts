@@ -62,3 +62,17 @@ test('institution rejects policy or agent signature substitution', async () => {
   await assert.rejects(decideRequest(institution, { ...request, policy_hash: `0x${'f'.repeat(64)}` }, policy, receipt, registry), /POLICY_MISMATCH/);
   await assert.rejects(decideRequest(institution, { ...request, amount_base_units: '1' }, policy, receipt, registry), /INVALID_AGENT_SIGNATURE/);
 });
+
+test('institution refuses a policy that was not valid when the request was signed', async () => {
+  const policy = await createPolicy(enterprise, {
+    policyId: 'payment-limit-v1', validFrom: '2026-09-20T00:00:00Z', maxAmountBaseUnits: '4000000000',
+  });
+  const request = await createRequest(agent, policy, {
+    requestId: 'REQ-002', createdAt: '2026-09-19T01:00:00Z', amountBaseUnits: '4500000000',
+    recipient: '0x1111111111111111111111111111111111111111',
+  });
+  const receipt = await createReceipt(gateway, request, {
+    requestTx: `0x${'a'.repeat(64)}`, blockNumber: 123n, observedAt: 1789780000, decisionDeadline: 1789780030,
+  });
+  await assert.rejects(decideRequest(institution, request, policy, receipt, registry), /POLICY_MISMATCH/);
+});

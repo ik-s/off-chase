@@ -12,7 +12,8 @@ export async function decideRequest(
   registry: KeyRegistry,
 ): Promise<DecisionRecord> {
   const policyHash = hashRecord(policy, 'enterprise_signature');
-  if (request.policy_id !== policy.policy_id || request.policy_hash !== policyHash || request.asset !== policy.asset) {
+  if (request.policy_id !== policy.policy_id || request.policy_hash !== policyHash || request.asset !== policy.asset ||
+      Date.parse(request.created_at) < Date.parse(policy.valid_from)) {
     throw new Error('POLICY_MISMATCH');
   }
   if (!registry[policy.enterprise_key_id] ||
