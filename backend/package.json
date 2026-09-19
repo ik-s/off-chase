@@ -10,6 +10,7 @@
     "test": "node --test tests/*.test.ts",
     "test:chain": "hardhat test",
     "typecheck": "tsc --noEmit",
+    "start": "node src/api/server.ts",
     "verify": "node src/verification/cli.ts",
     "check": "npm run typecheck && npm test && npm run test:chain"
   },
