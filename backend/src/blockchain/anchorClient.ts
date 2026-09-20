@@ -1,4 +1,4 @@
-import { keccak256, parseAbi, parseEventLogs, toBytes, type Address, type Hex, type PublicClient, type WalletClient } from 'viem';
+import { encodeEventTopics, keccak256, parseAbi, parseEventLogs, toBytes, type Address, type Hex, type PublicClient, type WalletClient } from 'viem';
 
 export const anchorAbi = parseAbi([
   'function records(bytes32) view returns (bytes32 requestHash, bytes32 policyHash, uint64 requestAnchoredAt, uint64 decisionDeadline, bytes32 decisionHash, uint64 decisionAnchoredAt)',
@@ -54,6 +54,17 @@ export class ChainAnchorReader {
   async chainTime(): Promise<number> {
     const block = await this.reader.getBlock();
     return Number(block.timestamp);
+  }
+
+  async findDecisionTx(requestId: string, decisionHash: Hex, fromBlock?: bigint): Promise<Hex | null> {
+    const logs = await this.reader.getLogs({
+      address: this.address,
+      fromBlock,
+      topics: encodeEventTopics({ abi: anchorAbi, eventName: 'DecisionAnchored', args: { requestKey: requestKey(requestId) } }),
+    } as never);
+    const key = requestKey(requestId);
+    const parsed = parseEventLogs({ abi: anchorAbi, eventName: 'DecisionAnchored', logs });
+    return parsed.filter((log) => log.args.requestKey === key && log.args.decisionHash === decisionHash).at(-1)?.transactionHash ?? null;
   }
 
   async verifyRequestTx(input: {

@@ -29,4 +29,6 @@ it('AnchorClient writes and reads real local-chain request and decision anchors'
   assert.equal(readAfter.decisionAnchoredAt, decision.anchoredAt);
   assert.ok(decision.anchoredAt <= request.decisionDeadline);
   assert.ok(await client.chainTime() >= decision.anchoredAt);
+  assert.equal(await client.findDecisionTx('REQ-001', decisionHash, request.blockNumber), decision.decisionTx);
+  assert.equal(await client.findDecisionTx('REQ-001', keccak256(toBytes('missing-decision')), request.blockNumber), null);
 });

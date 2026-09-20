@@ -9,6 +9,8 @@
   "scripts": {
     "test": "node --test tests/*.test.ts",
     "test:chain": "hardhat test",
+    "smoke:usdc": "node scripts/sepolia-usdc-smoke.ts",
+    "smoke:evidence": "node scripts/sepolia-evidence-smoke.ts",
     "typecheck": "tsc --noEmit",
     "start": "node src/api/server.ts",
     "verify": "node src/verification/cli.ts",

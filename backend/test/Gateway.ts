@@ -5,7 +5,8 @@ import { privateKeyToAccount } from 'viem/accounts';
 import { AnchorClient, ChainAnchorReader } from '../src/blockchain/anchorClient.ts';
 import { createPolicy } from '../src/enterprise/policy.ts';
 import { createRequest } from '../src/agent/mockAgent.ts';
-import { signRecord } from '../src/crypto/records.ts';
+import { decideRequest } from '../src/institution/mockWallet.ts';
+import { hashRecord, signRecord } from '../src/crypto/records.ts';
 import { verifyEvidence } from '../src/verification/verifier.ts';
 import { GatewayService, type EvidenceStore } from '../src/verification/service.ts';
 import type { EvidenceBundle, PolicyRecord, DecisionRecord } from '../src/records/schemas.ts';
@@ -78,6 +79,16 @@ it('missing demo remains PROCESSING until chain deadline and then becomes MISSIN
   assert.deepEqual(await verifyEvidence(bundle, registry, reader), { status: 'PROCESSING', errors: [] });
   await networkHelpers.time.increaseTo(bundle.verification_receipt.decision_deadline + 1);
   assert.deepEqual(await verifyEvidence(bundle, registry, reader), { status: 'MISSING', errors: ['MISSING_DECISION'] });
+});
+
+it('recovers an already anchored decision after the deadline without rebroadcasting', async () => {
+  const { gateway, anchor, store, request, networkHelpers } = await setup();
+  const pending = await gateway.submitRequest(request, { omitDecision: true });
+  const decision = await decideRequest(institution, request, store.policy!, pending.verification_receipt, registry);
+  const anchored = await anchor.anchorDecision(request.request_id, hashRecord(decision, 'institution_signature'));
+  await networkHelpers.time.increaseTo(pending.verification_receipt.decision_deadline + 1);
+  const recovered = await gateway.submitDecision(decision);
+  assert.equal(recovered.anchors.decision_tx, anchored.decisionTx);
 });
 
 it('downloaded evidence stays verifiable after the institution decision row is deleted', async () => {
