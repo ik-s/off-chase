@@ -1,0 +1,55 @@
+{
+  "schema_version": 1,
+  "policy": {
+    "schema_version": 1,
+    "policy_id": "payment-limit-v1",
+    "version": 1,
+    "asset": "USDC",
+    "max_amount_base_units": "4000000000",
+    "valid_from": "2026-09-19T20:35:59.344Z",
+    "enterprise_key_id": "enterprise-key-1",
+    "enterprise_signature": "0x2144a411c50958a565394eadf9e366d7fdd11a351ec5f72e315b10840851b3b524bfdcdf2673c7b24e7c825411bdea9256634a54957e3c2643e481aad22828381c"
+  },
+  "request": {
+    "schema_version": 1,
+    "request_id": "REQ-SEPOLIA-f33382fa-1f30-4ae1-a649-cbcd6a94d8c3",
+    "created_at": "2026-09-19T20:36:59.344Z",
+    "asset": "USDC",
+    "amount_base_units": "4500000000",
+    "recipient": "0xb73E4789f22867f64B93e85Dd104b5FDfA04255d",
+    "policy_id": "payment-limit-v1",
+    "policy_hash": "0xe1b39a2d94f8c25b49c18857fce67101c7a3139f5934d50cbcb2c92d8ece4f2b",
+    "nonce": "0x260b5cdfe148e691fdc7bb757a685a4fd9b0dda60e8e8064cd9b7b09648cf4ae",
+    "agent_key_id": "agent-key-1",
+    "agent_signature": "0x61b8e78e0d6634c5f1172b37195e6347bc0cf42d3def007713e23178c681da7b4196ef0af8878e0828af46d95df2fc751c28c08ceb8c770f3e1d87408c01f1011c"
+  },
+  "verification_receipt": {
+    "schema_version": 1,
+    "request_id": "REQ-SEPOLIA-f33382fa-1f30-4ae1-a649-cbcd6a94d8c3",
+    "request_hash": "0xef9fe6b66cb043c031a589a425d759d84388055b062e67ef25adfba1d61a0c38",
+    "policy_hash": "0xe1b39a2d94f8c25b49c18857fce67101c7a3139f5934d50cbcb2c92d8ece4f2b",
+    "request_anchor_tx": "0xc6cee1181e930bcf85be259a4f8a7cfe6b61df9e4a049abb3b9ff244e7f8f973",
+    "request_anchor_block": 11739924,
+    "observed_at": 1789850220,
+    "decision_deadline": 1789850250,
+    "verification_key_id": "verification-key-1",
+    "verification_signature": "0x5e806f736db9a5dd21ca9e25eb3ae65dc25b3a9bfe1822b0de120ddd1cec1f3c65546a7d82ec0be39997351c8cdd3d44ed7a42a5ffc07fddbed489d643b1b2371c"
+  },
+  "decision": {
+    "schema_version": 1,
+    "request_id": "REQ-SEPOLIA-f33382fa-1f30-4ae1-a649-cbcd6a94d8c3",
+    "request_hash": "0xef9fe6b66cb043c031a589a425d759d84388055b062e67ef25adfba1d61a0c38",
+    "policy_id": "payment-limit-v1",
+    "policy_hash": "0xe1b39a2d94f8c25b49c18857fce67101c7a3139f5934d50cbcb2c92d8ece4f2b",
+    "decision": "REJECT",
+    "reason_code": "LIMIT_EXCEEDED",
+    "institution_key_id": "institution-key-1",
+    "institution_signature": "0x54816bab2366a9493b037210619c3e1ef3f64bae524a04a3b5051bf7768aaa7a5999820f7f90f48d4c86b1ae1c99847bbcb4dd5d2eeefa40641f16fa21c57b191b"
+  },
+  "anchors": {
+    "chain_id": 11155111,
+    "contract_address": "0xd021328C42E17d16DF7DC306c326D90F7bC8f940",
+    "request_tx": "0xc6cee1181e930bcf85be259a4f8a7cfe6b61df9e4a049abb3b9ff244e7f8f973",
+    "decision_tx": "0xefb77b9202480b04e8a8c29fd6e6054651e5e1fed9b2e5811ded0db7869efe94"
+  }
+}
