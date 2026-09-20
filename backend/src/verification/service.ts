@@ -14,6 +14,8 @@ export interface EvidenceStore {
   saveBundle(bundle: EvidenceBundle): Promise<void>;
   saveDecision(decision: DecisionRecord): Promise<void>;
   deleteInstitutionDecision(requestId: string): Promise<void>;
+  /** Persist a decision-bearing bundle atomically when the backing store supports it. */
+  saveCompletedBundle?(bundle: EvidenceBundle): Promise<void>;
 }
 
 export class GatewayService {
@@ -85,19 +87,39 @@ export class GatewayService {
     const exceeded = BigInt(bundle.request.amount_base_units) > BigInt(bundle.policy.max_amount_base_units);
     if (decision.decision !== (exceeded ? 'REJECT' : 'APPROVE') ||
         decision.reason_code !== (exceeded ? 'LIMIT_EXCEEDED' : 'WITHIN_LIMIT')) throw new Error('POLICY_MISMATCH');
+    const decisionHash = hashRecord(decision, 'institution_signature');
     if (bundle.decision) {
-      if (hashRecord(bundle.decision, 'institution_signature') === hashRecord(decision, 'institution_signature')) return bundle;
+      if (hashRecord(bundle.decision, 'institution_signature') === decisionHash) return bundle;
       throw new Error('DECISION_ALREADY_ANCHORED');
     }
     const record = await this.anchor.readRecord(decision.request_id);
     if (!record.requestHash || record.requestHash !== requestHash) throw new Error('INVALID_REQUEST_REFERENCE');
-    if (await this.anchor.chainTime() > record.decisionDeadline) throw new Error('DEADLINE_EXPIRED');
-    const result = await this.anchor.anchorDecision(decision.request_id, hashRecord(decision, 'institution_signature'));
+    const recovered = record.decisionHash === decisionHash;
+    if (recovered && (record.decisionAnchoredAt === null || record.decisionAnchoredAt > record.decisionDeadline)) {
+      throw new Error('DEADLINE_EXPIRED');
+    }
+    if (!recovered && await this.anchor.chainTime() > record.decisionDeadline) throw new Error('DEADLINE_EXPIRED');
+    let result: { decisionTx: `0x${string}` };
+    if (recovered) {
+      const recoveredTx = await this.anchor.findDecisionTx(
+        decision.request_id,
+        decisionHash,
+        BigInt(bundle.verification_receipt.request_anchor_block),
+      );
+      if (!recoveredTx) throw new Error('DECISION_ANCHOR_RECOVERY_FAILED');
+      result = { decisionTx: recoveredTx };
+    } else {
+      result = await this.anchor.anchorDecision(decision.request_id, decisionHash);
+    }
     const completed = EvidenceBundleSchema.parse({
       ...bundle, decision, anchors: { ...bundle.anchors, decision_tx: result.decisionTx },
     });
-    await this.store.saveDecision(decision);
-    await this.store.saveBundle(completed);
+    if (this.store.saveCompletedBundle) {
+      await this.store.saveCompletedBundle(completed);
+    } else {
+      await this.store.saveDecision(decision);
+      await this.store.saveBundle(completed);
+    }
     return completed;
   }
 }

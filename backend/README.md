@@ -23,6 +23,20 @@ cd backend
 npx hardhat run scripts/deploy-anchor.ts --build-profile production --network sepolia
 ```
 
+The deploy script checks chain ID `11155111` and the contract owner. It has not yet been run on Sepolia. Gateway tests use a temporary in-memory implementation of the `EvidenceStore` port; Express routes, backend runtime key loading, demo endpoints and frontend API adapter are pending. No runtime credentials or private keys are committed.
+
+## Supabase Evidence Store
+
+The `SupabaseEvidenceStore` adapter implements the existing `EvidenceStore` port without changing the Gateway or verifier. Apply `supabase/migrations/001_evidence_store.sql` to a Supabase project, then configure the server-side variables in `.env.example`:
+
+```text
+SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_SERVICE_ROLE_KEY=replace-me
+```
+
+Use `createSupabaseEvidenceStoreFromEnv()` from backend runtime wiring when that wiring is added. The service role key is required for server writes; never expose it to the frontend. Signed records and the evidence bundle are stored as JSONB, while request IDs remain unique relational keys. Deleting a row from `decisions` is intentionally independent from the already exported bundle.
+
+`persist_evidence_bundle` is a `security definer` transaction used by `saveCompletedBundle()`. It writes the decision, anchor metadata, and completed bundle together, rejects replacement of a signed policy/request/receipt/decision with a different record, and advances an existing request from pending to complete. `GatewayService` uses this operation when available and can recover a committed decision anchor by locating its `DecisionAnchored` event before retrying persistence. `listBundles()` is available for the later case-list API and is not part of the Gateway port.
 The deploy script checks chain ID `11155111` and the contract owner. A disposable demo `DecisionAnchor` was deployed on Sepolia at [`0xd021328C42E17d16DF7DC306c326D90F7bC8f940`](https://sepolia.etherscan.io/address/0xd021328C42E17d16DF7DC306c326D90F7bC8f940). Gateway tests use a temporary in-memory implementation of the `EvidenceStore` port; the Supabase repository, Express routes, backend runtime key loading, demo endpoints and frontend API adapter are pending. No runtime credentials or private keys are committed.
 
 For an isolated **real testnet USDC transfer** check, fund a disposable Sepolia wallet with test ETH for gas and at least 1 test USDC. The script uses [Circle's Sepolia test USDC contract](https://developers.circle.com/stablecoins/usdc-contract-addresses), sends 1 USDC to a separate test address, and checks the mined receipt's exact `Transfer` event and both balance changes. Keep the wallet JSON outside Git; it needs `{"chainId":11155111,"address":"0xYourWalletAddress","privateKey":"0x..."}`. Run:
