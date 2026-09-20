@@ -7,6 +7,7 @@ import {
   type DecisionRecord, type EvidenceBundle, type PolicyRecord,
 } from '../records/schemas.ts';
 import { createReceipt } from './receipt.ts';
+import { matchesDecisionPolicy } from '../institution/decisionPolicy.ts';
 
 const ENTERPRISE_KEY_ID = 'enterprise-key-1';
 const AGENT_KEY_ID = 'agent-key-1';
@@ -44,7 +45,9 @@ export class GatewayService {
     this.institutionAccount = institutionAccount;
   }
 
-  async submitRequest(input: unknown, options: { omitDecision?: boolean } = {}): Promise<EvidenceBundle> {
+  async submitRequest(input: unknown, options: { omitDecision?: boolean; riskReject?: boolean; rejectionTest?: boolean; progress?: (stage: string) => Promise<void>; captureDecision?: (decision: DecisionRecord) => Promise<void> } = {}): Promise<EvidenceBundle> {
+    const progress = options.progress ?? (async () => {});
+    await progress('gateway_received');
     const request = RequestSchema.parse(input);
     const requestHash = hashRecord(request, 'agent_signature');
     const existing = await this.store.getBundle(request.request_id);
@@ -63,8 +66,13 @@ export class GatewayService {
         !await verifyRecordSignature(request, 'agent_signature', this.registry[request.agent_key_id])) {
       throw new Error('INVALID_AGENT_SIGNATURE');
     }
-    if ((await this.anchor.readRecord(request.request_id)).requestHash) throw new Error('REQUEST_ALREADY_ANCHORED');
-    const requestAnchor = await this.anchor.anchorRequest(request.request_id, requestHash, request.policy_hash as `0x${string}`);
+    const anchoredRequest = await this.anchor.readRecord(request.request_id);
+    if (anchoredRequest.requestHash && (anchoredRequest.requestHash !== requestHash || anchoredRequest.policyHash !== request.policy_hash)) throw new Error('REQUEST_ALREADY_ANCHORED');
+    await progress('request_validated');
+    const requestAnchor = anchoredRequest.requestHash
+      ? await this.anchor.recoverRequestAnchor(request.request_id)
+      : await this.anchor.anchorRequest(request.request_id, requestHash, request.policy_hash as `0x${string}`);
+    await progress('request_anchored');
     const receipt = await createReceipt(this.verificationAccount, request, requestAnchor);
     if (receipt.verification_key_id !== VERIFICATION_KEY_ID || !this.registry[VERIFICATION_KEY_ID] ||
         !await verifyRecordSignature(receipt, 'verification_signature', this.registry[VERIFICATION_KEY_ID])) {
@@ -77,9 +85,15 @@ export class GatewayService {
       },
     });
     await this.store.saveBundle(bundle);
+    await progress('receipt_saved');
     if (options.omitDecision) return bundle;
-    const decision = await decideRequest(this.institutionAccount, request, policy, receipt, this.registry);
-    return this.submitDecision(decision);
+    await progress('institution_dispatched');
+    const decision = await decideRequest(this.institutionAccount, request, policy, receipt, this.registry, options);
+    await options.captureDecision?.(decision);
+    await progress('response_received');
+    const completed = await this.submitDecision(decision);
+    await progress('decision_anchored_and_saved');
+    return completed;
   }
 
   async submitDecision(input: unknown): Promise<EvidenceBundle> {
@@ -93,9 +107,7 @@ export class GatewayService {
         !await verifyRecordSignature(decision, 'institution_signature', this.registry[decision.institution_key_id])) {
       throw new Error('INVALID_INSTITUTION_SIGNATURE');
     }
-    const exceeded = BigInt(bundle.request.amount_base_units) > BigInt(bundle.policy.max_amount_base_units);
-    if (decision.decision !== (exceeded ? 'REJECT' : 'APPROVE') ||
-        decision.reason_code !== (exceeded ? 'LIMIT_EXCEEDED' : 'WITHIN_LIMIT')) throw new Error('POLICY_MISMATCH');
+    if (!matchesDecisionPolicy(bundle.request, bundle.policy, decision)) throw new Error('POLICY_MISMATCH');
     const decisionHash = hashRecord(decision, 'institution_signature');
     if (bundle.decision) {
       if (hashRecord(bundle.decision, 'institution_signature') === decisionHash) return bundle;

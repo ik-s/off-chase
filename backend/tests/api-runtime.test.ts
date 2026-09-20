@@ -3,6 +3,7 @@ import { createServer } from 'node:http';
 import test from 'node:test';
 import type { EvidenceBundle } from '../src/records/schemas.ts';
 import { createApiApp } from '../src/api/app.ts';
+import type { CaseService } from '../src/api/cases.ts';
 
 const bundle = {
   schema_version: 1,
@@ -33,6 +34,44 @@ function app(overrides: Partial<Parameters<typeof createApiApp>[0]> = {}) {
     ...overrides,
   });
 }
+
+test('live case API keeps missing resources and disabled demos distinct from verification status', async () => {
+  let started = false;
+  const cases = {
+    list: async () => [], detail: async () => null, getRun: async () => null,
+    start: async () => { started = true; return {}; },
+  } as unknown as CaseService;
+  await withServer(app({ cases }), async url => {
+    assert.deepEqual(await fetch(`${url}/api/cases`).then(r => r.json()), []);
+    assert.equal((await fetch(`${url}/api/cases/missing`)).status, 404);
+    assert.equal((await fetch(`${url}/api/demo/runs/missing`)).status, 404);
+    const denied = await fetch(`${url}/api/demo/runs`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ scenario: 'normal' }) });
+    assert.equal(denied.status, 404);
+    assert.equal(started, false);
+  });
+});
+
+test('runtime does not turn infrastructure errors into INVALID verification results', async () => {
+  await withServer(app({ verify: async () => { throw new Error('RPC provider timed out'); } }), async url => {
+    const response = await fetch(`${url}/api/verifier`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ evidence: {} }) });
+    assert.equal(response.status, 500);
+    assert.deepEqual(await response.json(), { error: 'INTERNAL_ERROR' });
+  });
+});
+
+test('manual test requests validate amounts and retain local-only mutation guards', async () => {
+  let calls = 0;
+  const cases = { start: async (_scenario: string, amount: string) => { calls++; return { amount }; } } as unknown as CaseService;
+  const submit = (url: string, amount: unknown, extra = {}) => fetch(`${url}/api/test/requests`, { method: 'POST', headers: { 'content-type': 'application/json', ...extra }, body: JSON.stringify({ amountBaseUnits: amount }) });
+  await withServer(app({ cases }), async url => { assert.equal((await submit(url, '1000000')).status, 403); });
+  await withServer(app({ cases, demosEnabled: true }), async url => {
+    assert.equal((await submit(url, '1000000', { 'sec-fetch-site': 'cross-site' })).status, 403);
+    for (const value of ['0', '-1', '1.5', '1e6', '9'.repeat(31), 3500000000]) assert.equal((await submit(url, value)).status, 400);
+    assert.equal(calls, 0);
+    assert.equal((await submit(url, '3500123456')).status, 202);
+    assert.equal(calls, 1);
+  });
+});
 
 test('accepts gateway requests and returns the evidence bundle', async () => {
   await withServer(app(), async (url) => {

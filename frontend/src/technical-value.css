@@ -1,0 +1,10 @@
+.technical-value { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; min-width: 0; max-width: 100%; }
+.technical-value code { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.copy-value { display: inline-flex; align-items: center; justify-content: center; flex: none; width: 36px; height: 36px; padding: 0; }
+.copy-feedback { font: 13px sans-serif; color: var(--secondary); }
+.manual-copy { width: 100%; font: 14px sans-serif; }
+.manual-copy input { display: block; width: 100%; margin-top: 8px; }
+.explorer-links { display: flex; align-items: center; flex-wrap: wrap; gap: 12px 20px; margin: 20px 0; font-size: 15px; }
+.explorer-links > span { color: var(--secondary); }
+.process-disclosure { margin-bottom: 32px; }
+.process-disclosure[open] > summary { margin-bottom: 16px; }

@@ -1,0 +1,16 @@
+.test-request { max-width: 760px; margin: 0 auto; }
+.test-request-form { display: grid; gap: 20px; padding: 28px; margin-bottom: 24px; }
+.test-request-form label { display: flex; justify-content: space-between; font-size: 20px; }
+.test-request-form label span { color: var(--secondary); }
+.test-request-form input { width: 100%; min-width: 0; padding: 16px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg, #070b18); color: inherit; font: inherit; font-size: 28px; }
+.test-request-form p { color: var(--secondary); line-height: 1.7; font-size: 15px; }
+.test-request-form .primary-button { justify-self: start; }
+.test-request-form .test-policy-option { display: flex; justify-content: flex-start; align-items: flex-start; gap: 12px; font-size: 15px; line-height: 1.6; }
+.test-request-form .test-policy-option input { flex: none; width: 18px; height: 18px; padding: 0; margin-top: 3px; accent-color: #cbd5e1; }
+.run-progress { padding: 24px; }
+.run-progress h2 { font-size: 20px; margin-bottom: 8px; }
+.run-progress > p, .run-progress small { color: var(--secondary); font-size: 14px; line-height: 1.7; }
+.run-progress .run-events { padding-left: 22px; margin: 20px 0; }
+.run-progress .run-events li { padding: 8px 0; font-size: 16px; }
+.run-progress .run-events time { display: block; margin-top: 4px; font-size: 13px; color: var(--secondary); }
+@media (max-width: 600px) { .test-request-form { padding: 20px; } .flow-header-tools { flex-wrap: wrap; justify-content: flex-end; gap: 8px; } }

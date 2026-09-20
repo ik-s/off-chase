@@ -1170,7 +1170,9 @@ LIMIT_EXCEEDED
 
 Verifier는 Institution이 남긴 `reason_code`를 그대로 믿지 않는다.
 
-Policy를 직접 다시 계산한다.
+Policy를 직접 다시 계산한다. `APPROVE / WITHIN_LIMIT`와 `REJECT / LIMIT_EXCEEDED`는 금액 한도와 일치해야 한다.
+
+`REJECT / KYT_RISK`는 기관이 처음부터 서명한 위험 거절 응답으로 기록할 수 있다. 서명·참조·온체인 무결성을 검사하지만, 위험의 실체나 거절의 타당성은 검증하지 않는다. 해당 정책 판단 검사는 `not-applicable`로 표시한다. 실제 KYT 엔진은 구현하지 않는다.
 
 ---
 
@@ -1188,7 +1190,7 @@ INVALID
 
 ## VERIFIED
 
-모든 증거와 판단이 정상.
+증거의 서명·참조·온체인 무결성이 검증됨. 금액 기준 판단은 정책을 재계산하지만, KYT_RISK의 타당성을 보증하지 않는다. 결제 실행 성공을 의미하지 않는다.
 
 ## TAMPERED
 
@@ -1362,6 +1364,20 @@ npm run verify -- evidence-bundle-REQ-001.json
 
 독립 Verifier는 Institution DB를 사용하지 않는다.
 
+API 응답은 기존 `status`, `errors`에 실제 검사 결과 `checks`를 추가한다. 각 항목은 `id`, `label`, `state`, `detail`, `records`, 선택적 `error`를 갖는다. state는 passed / failed / not-run / not-applicable이다.
+
+## 28.5 Frontend 연동
+
+- `GET /api/cases`: 실제 저장 사건의 목록·검증 상태.
+- `GET /api/cases/:requestId`: Bundle, 실제 Anchor, 검증 결과, 처리 기록. 정책 변조 사건은 원본과 제출 사본을 구분한다.
+- `POST /api/test/requests`: `{ amountBaseUnits: "3500000000" }`으로 직접 테스트 요청을 시작하고 202와 실행 ID를 반환한다. 로컬 실행 서버의 ENABLE_DEMOS=true가 필요하다. 기존 `POST /api/demo/runs` 생성 API는 제거한다.
+- 직접 테스트 요청은 거절 사례만 생성한다. 모의 기관은 한도 초과 시 REJECT/LIMIT_EXCEEDED, 한도 이내(동일 포함)에서는 REJECT/KYT_RISK로 서명한다. 무작위 승인 분기는 없으며 실제 위험 평가나 송금은 수행하지 않는다. 원본 스키마의 APPROVE 지원은 일반 증거 검증 호환성을 위해 유지한다.
+- 사건 목록 API는 REJECT만 반환한다. 승인·접수 증거는 보존하고 ID로 조회할 수 있다. 목록 라벨은 실제 응답 사유를 사용하며, 기존 다섯 증거 검증 상태는 바꾸지 않는다.
+- `GET /api/demo/runs/:runId`: running / complete / failed와 서버 관측 이벤트 시각. 이 실행 상태는 증거 검증 상태와 별개다.
+- 직접 테스트 요청의 `policyTamper: true` 옵션은 당시 한도 4,000 USDC 미만 요청에만 허용한다. 기관은 REJECT/KYT_RISK로 응답하고, 사후 제시 정책 사본의 한도를 5,000으로 바꾼다. 원본 4,000 정책·요청·거절 응답·Anchor는 보존하며 변경본의 정책 해시 불일치를 TAMPERED로 검출한다. 한도를 높여도 금액 초과 거절의 근거가 되지 않으며 실제 위험 판단의 타당성은 검증하지 않는다.
+- 원본 Record 스키마는 유지한다. 처리 기록과 비교용 사본은 별도 demo_runs 테이블에 저장한다.
+- 원본 다운로드 API는 변조 전 보관 증거를 반환한다. 변조 사본은 사건 상세에서 실제 Verifier로 제출한다.
+
 ---
 
 # 29. Database
@@ -1417,37 +1433,12 @@ VERIFIED
 
 ---
 
-## Demo 2 — Decision 변조
+## Demo 2 — 정책 기록 변조
 
-정상 Decision:
-
-```text
-LIMIT_EXCEEDED
-```
-
-기관 DB의 Decision을:
-
-```text
-KYT_RISK
-```
-
-로 변경하고 필요하면 Institution Key로 다시 서명한다.
-
-과거 On-chain Decision Hash는 변경하지 않는다.
-
-Verifier:
-
-```text
-현재 Decision Hash
-!=
-On-chain Decision Hash
-```
-
-결과:
-
-```text
-TAMPERED
-```
+3,500 USDC 요청 당시 정책 한도는 4,000 USDC이며 정상 승인 증거를 확보한다.
+동일 사건에 사후 제시하는 정책 사본의 한도를 3,000으로 변경한다.
+원본 서명·요청·응답·Anchor는 보존한다. 현재 정책 Hash와 요청 당시 Anchor가 달라 `TAMPERED`다.
+정상적인 새 정책 버전 발행과 구분한다.
 
 ---
 
@@ -1471,19 +1462,13 @@ MISSING
 
 ---
 
-## Demo 4 — Institution DB 삭제
+## Demo 4 — 알 수 없는 거절
 
-1. 정상 Request / Decision 생성
-2. Decision Anchor 완료
-3. Evidence Bundle 다운로드
-4. Institution DB Decision Row 삭제
-5. 다운로드한 Evidence Bundle을 Independent Verifier로 검증
+3,500 USDC 요청 / 정책 한도 4,000 USDC. 기관이 처음부터 `REJECT / KYT_RISK`에 서명한다.
+실제 응답과 Anchor가 일치하면 `VERIFIED`이며, 위험 판단의 타당성은 확인 불가로 별도 표시한다.
+기존 승인을 사후에 거절로 바꾸는 변조와 다르다.
 
-결과:
-
-```text
-VERIFIED
-```
+기관 기록 삭제는 실행 데모에서 제외한다. 기관이 기록을 삭제하더라도 검증 레이어가 독립 보관한 요청·응답과 온체인 증거로 당시 기록을 검증한다는 설명을 제공한다.
 
 ---
 

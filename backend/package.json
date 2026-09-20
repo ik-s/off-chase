@@ -12,7 +12,7 @@
     "smoke:usdc": "node scripts/sepolia-usdc-smoke.ts",
     "smoke:evidence": "node scripts/sepolia-evidence-smoke.ts",
     "typecheck": "tsc --noEmit",
-    "start": "node src/api/server.ts",
+    "start": "node --env-file-if-exists=.env src/api/server.ts",
     "verify": "node src/verification/cli.ts",
     "check": "npm run typecheck && npm test && npm run test:chain"
   },

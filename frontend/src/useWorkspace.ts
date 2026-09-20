@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useReducer, useRef } from 'react';
-import type { DemoScenario, EvidenceRepository } from './data/types.ts';
+import { useCallback, useEffect, useReducer, useRef, useState } from 'react';
+import type { DemoScenario, DemoRun, EvidenceRepository } from './data/types.ts';
 import { initialState, workspaceReducer } from './state.ts';
 
 const errorMessage = (error: unknown) => error instanceof Error ? error.message : '일시적인 오류입니다. 다시 시도해 주세요.';
@@ -10,6 +10,9 @@ export function useWorkspace(repository: EvidenceRepository) {
   const listGeneration = useRef(0);
   const fileGeneration = useRef(0);
   const demoLock = useRef(false);
+  const [runProgress, setRunProgress] = useState<DemoRun | null>(null);
+  const demoAbort = useRef<AbortController | null>(null);
+  useEffect(() => () => demoAbort.current?.abort(), []);
   const refreshList = useCallback(async (preferredId?: string) => {
     const generation = ++listGeneration.current;
     try {
@@ -24,7 +27,8 @@ export function useWorkspace(repository: EvidenceRepository) {
   const hasProcessing = state.cases.some(c => c.status === 'PROCESSING');
   useEffect(() => {
     if (!hasProcessing) return;
-    const timer = setInterval(() => { if (!demoLock.current) void refreshList(); }, 1000);
+    let pending = false;
+    const timer = setInterval(() => { if (!demoLock.current && !pending) { pending = true; void refreshList().finally(() => { pending = false; }); } }, 2000);
     return () => clearInterval(timer);
   }, [hasProcessing, refreshList]);
 
@@ -38,7 +42,7 @@ export function useWorkspace(repository: EvidenceRepository) {
         const detail = await repository.getCase(id);
         if (active) {
           dispatch({ type: 'detail', id, detail });
-          if (detail.report.status === 'PROCESSING') timer = setTimeout(() => void load(), 1000);
+          if (detail.report.status === 'PROCESSING' || detail.run?.status === 'running') timer = setTimeout(() => void load(), 2000);
         }
       } catch (error) {
         if (active) dispatch({ type: 'detail-error', id, error: errorMessage(error) });
@@ -48,16 +52,23 @@ export function useWorkspace(repository: EvidenceRepository) {
     return () => { active = false; clearTimeout(timer); };
   }, [repository, state.selectedId, retry]);
 
-  const runDemo = async (scenario: DemoScenario) => {
+  const runDemo = async (scenario: DemoScenario, amountBaseUnits?: string, policyTamper = false) => {
     if (demoLock.current) return;
     demoLock.current = true;
     dispatch({ type: 'patch', patch: { demo: scenario, notice: null } });
     try {
-      const id = await repository.runDemo(scenario);
+      demoAbort.current = new AbortController();
+      setRunProgress(null);
+      const id = amountBaseUnits !== undefined
+        ? await repository.submitTestRequest!(amountBaseUnits, setRunProgress, demoAbort.current.signal, policyTamper)
+        : await repository.runDemo(scenario, setRunProgress, demoAbort.current.signal);
       await refreshList(id);
       return id;
     }
-    catch (error) { dispatch({ type: 'patch', patch: { notice: errorMessage(error) } }); }
+    catch (error) {
+      if (demoAbort.current?.signal.aborted) return;
+      dispatch({ type: 'patch', patch: { notice: errorMessage(error) } }); await refreshList();
+    }
     finally { demoLock.current = false; dispatch({ type: 'patch', patch: { demo: null } }); }
   };
   const selectFile = (file: File | null) => {
@@ -100,5 +111,5 @@ export function useWorkspace(repository: EvidenceRepository) {
     if (!state.detail) throw new Error('먼저 사건을 선택해 주세요.');
     return repository.verifyEvidence(state.detail.bundle);
   };
-  return { state, dispatch, refreshList, retryDetail, runDemo, selectFile, verifyFile, download, verifyCase };
+  return { submitTestRequest: (amount: string, policyTamper = false) => runDemo('normal', amount, policyTamper), state, dispatch, refreshList, retryDetail, runDemo, runProgress, selectFile, verifyFile, download, verifyCase };
 }

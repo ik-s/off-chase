@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
+import type { Run } from '../api/cases.ts';
 import type { EvidenceStore } from '../verification/service.ts';
 import { hashRecord } from '../crypto/records.ts';
 import {
@@ -57,9 +58,32 @@ export class SupabaseEvidenceStore implements EvidenceStore {
     this.client = client;
   }
 
+  async getCaseNumber(id: string): Promise<number | null> {
+    const row = ensure(await this.client.from('requests').select('case_number').eq('request_id', id).maybeSingle<{ case_number: number }>(), 'GET_CASE_NUMBER');
+    return row?.case_number ?? null;
+  }
+
   async getPolicy(policyId: string): Promise<PolicyRecord | null> {
     const row = ensure(await this.client.from('policies').select('record').eq('policy_id', policyId).maybeSingle<JsonRow>(), 'GET_POLICY');
     return row ? asRecord(row.record, PolicySchema) : null;
+  }
+
+  async savePolicy(policy: PolicyRecord): Promise<void> {
+    const existing = await this.getPolicy(policy.policy_id);
+    if (existing) {
+      if (hashRecord(existing, 'enterprise_signature') !== hashRecord(policy, 'enterprise_signature')) throw new Error('IMMUTABLE_POLICY_CONFLICT');
+      return;
+    }
+    ensure(await this.client.from('policies').insert({ policy_id: policy.policy_id, record: PolicySchema.parse(policy) }), 'SAVE_POLICY');
+  }
+
+  async saveRun(run: Run): Promise<void> {
+    ensure(await this.client.from('demo_runs').upsert({ id: run.id, record: run }, { onConflict: 'id' }), 'SAVE_RUN');
+  }
+
+  async getRun(id: string): Promise<Run | null> {
+    const row = ensure(await this.client.from('demo_runs').select('record').eq('id', id).maybeSingle<{ record: Run }>(), 'GET_RUN');
+    return row?.record ?? null;
   }
 
   async getBundle(requestId: string): Promise<EvidenceBundle | null> {
