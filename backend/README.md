@@ -16,6 +16,15 @@ The local Hardhat tests exercise the chain contract, normal `REJECT / LIMIT_EXCE
 
 The independent CLI reads an exported Bundle and a separate public key registry. Copy `key-registry.example.json` to `key-registry.json` and replace every address with the deployed role address. Export `RPC_URL`, `CHAIN_ID`, and `ANCHOR_CONTRACT_ADDRESS`; then run `npm run verify -- evidence-bundle-REQ-001.json`. The example addresses belong only to deterministic local tests. The CLI rejects a mismatched RPC chain ID and does not require private keys or Institution DB access.
 
+## Express API runtime
+
+`npm start` launches a development-only Gateway bound to `127.0.0.1` with the documented fixed 4,000 USDC policy and an in-memory EvidenceStore. It requires `RPC_URL`, `CHAIN_ID`, `ANCHOR_CONTRACT_ADDRESS`, `KEY_REGISTRY_PATH`, `ENTERPRISE_PRIVATE_KEY`, `AGENT_PRIVATE_KEY`, `VERIFICATION_PRIVATE_KEY`, `INSTITUTION_PRIVATE_KEY`, and `ANCHOR_WRITER_PRIVATE_KEY`. Startup confirms deployed contract code, confirms the Anchor Writer owns the contract, and verifies matching `enterprise-key-1`, `agent-key-1`, `verification-key-1`, and `institution-key-1` registry entries. The process has no persistence across restarts. Optional `PORT` defaults to `3000`.
+
+- `POST /api/requests` with `{ "request": RequestRecord }` anchors a signed request and returns its Evidence Bundle.
+- `POST /api/decisions` with `{ "decision": DecisionRecord }` anchors an institution decision and returns its completed bundle.
+- `GET /api/requests/:requestId/evidence` downloads `evidence-bundle-<requestId>.json`.
+- `POST /api/verifier` with `{ "evidence": EvidenceBundle }` returns the independent verifier report. It reads only the static registry and chain client, never the institution store.
+
 Sepolia configuration uses the environment variable names in `.env.example`. With a funded Anchor Writer key and RPC URL, deployment is:
 
 ```bash
@@ -23,11 +32,11 @@ cd backend
 npx hardhat run scripts/deploy-anchor.ts --build-profile production --network sepolia
 ```
 
-The deploy script checks chain ID `11155111` and the contract owner. It has not yet been run on Sepolia. Gateway tests use a temporary in-memory implementation of the `EvidenceStore` port; Express routes, backend runtime key loading, demo endpoints and frontend API adapter are pending. No runtime credentials or private keys are committed.
+The deploy script checks chain ID `11155111` and the contract owner. A disposable demo `DecisionAnchor` was deployed on Sepolia at [`0xd021328C42E17d16DF7DC306c326D90F7bC8f940`](https://sepolia.etherscan.io/address/0xd021328C42E17d16DF7DC306c326D90F7bC8f940). The development API uses an in-memory EvidenceStore; Supabase runtime wiring, demo endpoints and the frontend API adapter remain pending. No runtime credentials or private keys are committed.
 
 ## Supabase Evidence Store
 
-The `SupabaseEvidenceStore` adapter implements the existing `EvidenceStore` port without changing the Gateway or verifier. Apply `supabase/migrations/001_evidence_store.sql` to a Supabase project, then configure the server-side variables in `.env.example`:
+The `SupabaseEvidenceStore` adapter implements the `EvidenceStore` port. Apply `supabase/migrations/001_evidence_store.sql` to a Supabase project, then configure the server-side variables in `.env.example`:
 
 ```text
 SUPABASE_URL=https://your-project.supabase.co
@@ -37,7 +46,7 @@ SUPABASE_SERVICE_ROLE_KEY=replace-me
 Use `createSupabaseEvidenceStoreFromEnv()` from backend runtime wiring when that wiring is added. The service role key is required for server writes; never expose it to the frontend. Signed records and the evidence bundle are stored as JSONB, while request IDs remain unique relational keys. Deleting a row from `decisions` is intentionally independent from the already exported bundle.
 
 `persist_evidence_bundle` is a `security definer` transaction used by `saveCompletedBundle()`. It writes the decision, anchor metadata, and completed bundle together, rejects replacement of a signed policy/request/receipt/decision with a different record, and advances an existing request from pending to complete. `GatewayService` uses this operation when available and can recover a committed decision anchor by locating its `DecisionAnchored` event before retrying persistence. `listBundles()` is available for the later case-list API and is not part of the Gateway port.
-The deploy script checks chain ID `11155111` and the contract owner. A disposable demo `DecisionAnchor` was deployed on Sepolia at [`0xd021328C42E17d16DF7DC306c326D90F7bC8f940`](https://sepolia.etherscan.io/address/0xd021328C42E17d16DF7DC306c326D90F7bC8f940). Gateway tests use a temporary in-memory implementation of the `EvidenceStore` port; the Supabase repository, Express routes, backend runtime key loading, demo endpoints and frontend API adapter are pending. No runtime credentials or private keys are committed.
+
 
 For an isolated **real testnet USDC transfer** check, fund a disposable Sepolia wallet with test ETH for gas and at least 1 test USDC. The script uses [Circle's Sepolia test USDC contract](https://developers.circle.com/stablecoins/usdc-contract-addresses), sends 1 USDC to a separate test address, and checks the mined receipt's exact `Transfer` event and both balance changes. Keep the wallet JSON outside Git; it needs `{"chainId":11155111,"address":"0xYourWalletAddress","privateKey":"0x..."}`. Run:
 

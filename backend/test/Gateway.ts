@@ -6,7 +6,7 @@ import { AnchorClient, ChainAnchorReader } from '../src/blockchain/anchorClient.
 import { createPolicy } from '../src/enterprise/policy.ts';
 import { createRequest } from '../src/agent/mockAgent.ts';
 import { decideRequest } from '../src/institution/mockWallet.ts';
-import { hashRecord } from '../src/crypto/records.ts';
+import { hashRecord, signRecord } from '../src/crypto/records.ts';
 import { verifyEvidence } from '../src/verification/verifier.ts';
 import { GatewayService, type EvidenceStore } from '../src/verification/service.ts';
 import type { EvidenceBundle, PolicyRecord, DecisionRecord } from '../src/records/schemas.ts';
@@ -48,7 +48,7 @@ async function setup() {
     requestId: 'REQ-001', createdAt: '2026-09-19T01:00:00Z', amountBaseUnits: '4500000000',
     recipient: '0x1111111111111111111111111111111111111111',
   });
-  return { gateway, anchor, store, reader, request, networkHelpers };
+  return { anchor, gateway, store, reader, request, networkHelpers };
 }
 
 it('gateway anchors signed request before mock institution decision and exports a verifiable bundle', async () => {
@@ -103,4 +103,12 @@ it('rejects modified agent request before anchoring', async () => {
   const { gateway, reader, request } = await setup();
   await assert.rejects(gateway.submitRequest({ ...request, amount_base_units: '1' }), /INVALID_AGENT_SIGNATURE/);
   assert.equal((await reader.readRecord(request.request_id)).requestHash, null);
+});
+
+it('requires the fixed MVP key IDs even when an alternate registry alias has a valid signature', async () => {
+  const { anchor, store, request } = await setup();
+  const aliasedRegistry = { ...registry, 'agent-key-2': agent.address };
+  const aliasedGateway = new GatewayService(anchor, store, aliasedRegistry, gatewaySigner, institution);
+  const aliasedRequest = await signRecord({ ...request, agent_key_id: 'agent-key-2', agent_signature: undefined }, 'agent_signature', agent);
+  await assert.rejects(aliasedGateway.submitRequest(aliasedRequest), /INVALID_AGENT_SIGNATURE/);
 });
