@@ -18,3 +18,4 @@ backend/key-registry.json
 frontend/node_modules/
 frontend/dist/
 .worktrees/
+backend/supabase/.temp/

@@ -4,7 +4,8 @@ export const statuses = ['VERIFIED', 'PROCESSING', 'MISSING', 'TAMPERED', 'INVAL
 export type VerificationStatus = typeof statuses[number];
 export type CaseFilter = 'ALL' | VerificationStatus;
 export type EvidenceSelection = 'policy' | 'request' | 'verification_receipt' | 'decision' | 'anchors';
-export type DemoScenario = 'normal' | 'tampered' | 'missing' | 'deleted';
+export type DemoScenario = 'normal' | 'tampered' | 'missing' | 'unknown';
+export interface DemoRun { decision?: 'APPROVE' | 'REJECT'; reasonCode?: string; id: string; requestId: string; scenario: DemoScenario; status: 'running' | 'complete' | 'failed'; events: Array<{ stage: string; at: string }>; error?: string }
 export type LoadState = 'loading' | 'ready' | 'error';
 export interface VerificationCheckViewModel {
   id: string;
@@ -20,6 +21,7 @@ export interface VerificationReportViewModel {
   checks: VerificationCheckViewModel[];
 }
 export interface CaseSummaryViewModel {
+  displayId?: string;
   id: string;
   amount: string;
   decision: 'REJECT' | 'APPROVE' | null;
@@ -27,13 +29,16 @@ export interface CaseSummaryViewModel {
   label: string;
 }
 export interface CaseDetail {
+  displayId?: string;
+  run?: DemoRun | null;
+  originalBundle?: EvidenceBundle;
   bundle: EvidenceBundle;
   report: VerificationReportViewModel;
   label: string;
   institutionRecordPresent: boolean;
   chainTime: number;
   requestAnchor: { hash: string; policyHash: string; timestamp: number; block: number };
-  decisionAnchor: { hash: string; timestamp: number; block: number } | null;
+  decisionAnchor: { hash: string; timestamp: number; block: number | null } | null;
   change?: { before: string; after: string };
 }
 export type VerificationOutcome =
@@ -47,5 +52,6 @@ export interface EvidenceRepository {
   getCase(requestId: string): Promise<CaseDetail>;
   downloadEvidence(requestId: string): Promise<{ filename: string; content: string }>;
   verifyEvidence(bundle: unknown): Promise<VerificationOutcome>;
-  runDemo(scenario: DemoScenario): Promise<string>;
+  submitTestRequest?(amountBaseUnits: string, onProgress?: (run: DemoRun) => void, signal?: AbortSignal, policyTamper?: boolean): Promise<string>;
+  runDemo(scenario: DemoScenario, onProgress?: (run: DemoRun) => void, signal?: AbortSignal): Promise<string>;
 }

@@ -4,6 +4,7 @@ import { formatUsdc, statusDescriptions, utc } from './data/presentation.ts';
 import { EvidenceTimeline, StatusBadge } from './components.tsx';
 import { EvidenceDetail } from './EvidenceDetail.tsx';
 import { EvidenceReview } from './EvidenceReview.tsx';
+import { RunProgress } from './RunProgress.tsx';
 
 const steps = ['요청 확인', '판단 확인', '증거 검증'];
 
@@ -13,10 +14,9 @@ interface Props {
   onVerify: () => Promise<VerificationOutcome>;
   onDownload: () => void;
   downloading: boolean;
-  onDemo: () => void;
 }
 
-export function GuidedCase({ detail, mock, onVerify, onDownload, downloading, onDemo }: Props) {
+export function GuidedCase({ detail, mock, onVerify, onDownload, downloading }: Props) {
   const [step, setStep] = useState(0);
   const [furthest, setFurthest] = useState(0);
   const [result, setResult] = useState<VerificationOutcome | null>(null);
@@ -28,8 +28,9 @@ export function GuidedCase({ detail, mock, onVerify, onDownload, downloading, on
   const previousStep = useRef(0);
   const verifyLock = useRef(false);
   const { bundle } = detail;
+  const displayId = detail.displayId ?? bundle.request.request_id;
   const requestAmount = formatUsdc(bundle.request.amount_base_units);
-  const limit = formatUsdc(bundle.policy.max_amount_base_units);
+  const limit = formatUsdc((detail.originalBundle ?? bundle).policy.max_amount_base_units);
   const rejected = bundle.decision?.decision === 'REJECT';
 
   useEffect(() => {
@@ -51,12 +52,14 @@ export function GuidedCase({ detail, mock, onVerify, onDownload, downloading, on
   };
 
   return <>
+    {!mock && bundle.anchors.chain_id !== 11155111 && <p className="context-note">로컬/설정 체인 {bundle.anchors.chain_id} · Sepolia 실행 결과가 아닙니다.</p>}
+    {detail.run && <details className="all-checks process-disclosure"><summary>요청 처리 과정과 시각</summary><RunProgress run={detail.run} displayId={displayId} /></details>}
     <nav className="flow-steps" aria-label="사건 확인 단계"><ol>{steps.map((label, index) => <li key={label}><button aria-current={step === index ? 'step' : undefined} disabled={index > furthest || busy} onClick={() => setStep(index)}><span className="flow-step-number">{index < step ? '✓' : String(index + 1).padStart(2, '0')}</span><span>{label}</span></button></li>)}</ol></nav>
 
     {step === 0 && <section aria-labelledby="step-heading">
-      <div className="flow-intro"><span className="eyebrow">STEP 01</span><h1 ref={heading} tabIndex={-1} id="step-heading">{bundle.request.request_id} · Request</h1></div>
+      <div className="flow-intro"><span className="eyebrow">STEP 01</span><h1 ref={heading} tabIndex={-1} id="step-heading">{displayId} · Request</h1></div>
       <div className="flow-card request-comparison">
-        <div className="request-side"><span className="field-label">AGENT REQUEST</span><span className="flow-amount">{requestAmount}<small>USDC</small></span><p>요청 금액</p><span className="mono request-reference">{bundle.request.request_id}</span></div>
+        <div className="request-side"><span className="field-label">AGENT REQUEST</span><span className="flow-amount">{requestAmount}<small>USDC</small></span><p>요청 금액</p><span className="mono request-reference">{displayId}</span></div>
         <div className="comparison-divider" aria-hidden="true"><span>→</span></div>
         <div className="policy-side"><span className="field-label">ENTERPRISE POLICY</span><span className="flow-amount">{limit}<small>USDC</small></span><p>1회 결제 한도</p><span className="request-reference">적용 정책 · v{bundle.policy.version}</span></div>
         <div className="request-route"><span>Agent</span><span aria-hidden="true">→</span><strong>Verification Layer <span>요청 관측</span></strong><span aria-hidden="true">→</span><span>Institution Wallet</span></div>
@@ -70,13 +73,14 @@ export function GuidedCase({ detail, mock, onVerify, onDownload, downloading, on
     </section>}
 
     {step === 1 && <section aria-labelledby="step-heading">
-      <div className="flow-intro"><span className="eyebrow">STEP 02</span><h1 ref={heading} tabIndex={-1} id="step-heading">{bundle.request.request_id} · Decision</h1></div>
+      <div className="flow-intro"><span className="eyebrow">STEP 02</span><h1 ref={heading} tabIndex={-1} id="step-heading">{displayId} · Decision</h1></div>
       <div className="flow-card decision-focus">
         <div className="decision-context"><span>{requestAmount} USDC 요청</span><span aria-hidden="true">→</span><span>1회 한도 {limit} USDC</span></div>
         <span className="field-label">INSTITUTION DECISION</span>
         <div className="decision-word">{bundle.decision?.decision ?? 'NO DECISION'}<span>{bundle.decision ? rejected ? '결제 거절' : '결제 승인' : '결정 기록 없음'}</span></div>
         <div className="decision-explanation"><h2>{bundle.decision?.reason_code === 'LIMIT_EXCEEDED' ? '1회 결제 한도 초과' : bundle.decision?.reason_code === 'KYT_RISK' ? '기록된 사유: KYT 위험' : !bundle.decision ? 'Decision Record 없음' : '기관 판단'}</h2><code>{bundle.decision?.reason_code ?? '—'}</code></div>
-        {detail.change && <><div className="change-comparison"><div><span className="field-label">보관된 판단</span><code>{detail.change.before}</code></div><span aria-hidden="true">→</span><div><span className="field-label">현재 기록의 판단</span><code>{detail.change.after}</code></div></div><p className="context-note">한도 이내 요청에 대한 기존 승인을 거절로 바꾼 모의 사례입니다. 요청과 정책, 보관된 Anchor는 그대로입니다.</p></>}
+        {detail.change && <><div className="change-comparison"><div><span className="field-label">요청 당시 정책</span><code>{detail.change.before}</code></div><span aria-hidden="true">→</span><div><span className="field-label">사후 제시 정책</span><code>{detail.change.after}</code></div></div><p className="context-note">원본 요청·응답·Anchor는 보존하고, 정책 사본의 한도만 변경한 사례입니다.</p></>}
+        {bundle.decision?.reason_code === 'KYT_RISK' && <p className="context-note">금액 한도 이내지만 기관이 위험 거래라는 사유로 거절했습니다. 구체적인 위험 근거는 제공되지 않았습니다.</p>}
         {!bundle.decision && <p className="context-note">결정 기한 {utc(bundle.verification_receipt.decision_deadline)} · {mock ? '모의 Chain Time' : 'Chain Time'} 기준</p>}
         {!detail.institutionRecordPresent && bundle.decision && <p className="context-note">기관 DB에는 현재 기록이 없습니다. 이 판단은 이전에 확보한 Evidence Bundle에 남아 있습니다.</p>}
       </div>
@@ -89,7 +93,7 @@ export function GuidedCase({ detail, mock, onVerify, onDownload, downloading, on
     </section>}
 
     {step === 2 && <section aria-labelledby="step-heading">
-      <div className="flow-intro"><span className="eyebrow">STEP 03</span><h1 ref={heading} tabIndex={-1} id="step-heading">{bundle.request.request_id} · Evidence</h1></div>
+      <div className="flow-intro"><span className="eyebrow">STEP 03</span><h1 ref={heading} tabIndex={-1} id="step-heading">{displayId} · Evidence</h1></div>
       {busy && <div className="flow-card verification-loading" role="status"><span className="verification-loader" aria-hidden="true" /><h2>증거를 확인하고 있습니다.</h2><p>요청 → 정책 → 판단 → 기록의 무결성</p></div>}
       {error && <div className="error-message" role="alert">{error}<button onClick={() => void verify()}>다시 시도</button></div>}
       {result?.kind === 'unsupported' && <div className="context-note" role="status">{result.message}</div>}
@@ -101,8 +105,7 @@ export function GuidedCase({ detail, mock, onVerify, onDownload, downloading, on
         {result.report.status === 'VERIFIED' && <p className="flow-result-note">{bundle.decision?.decision === 'REJECT' ? '결제는 거절됐지만, 그 판단의 증거는 검증됐습니다.' : 'VERIFIED는 실제 결제 실행이 아니라 증거의 검증 상태입니다.'}{mock && ' 이 결과는 Mock 시뮬레이션입니다.'}</p>}
         {result.report.status === 'PROCESSING' && <div className="context-note">확인 당시 결과입니다. 기한이 지난 뒤 다시 확인해 주세요.<button className="text-button" onClick={() => void verify()}>검증 결과 다시 확인 →</button></div>}
         {!detail.institutionRecordPresent && bundle.decision && <p className="context-note">현재 기관 DB에 기록이 없어도 보관된 Evidence로 과거 판단을 확인합니다. 삭제 행위 자체를 증명하지 않습니다.</p>}
-        <div className="flow-actions"><button className="text-button" onClick={() => setStep(1)}>← 판단 다시 보기</button><button className="primary-button" disabled={downloading} onClick={onDownload}>{downloading ? '준비 중…' : '증거 파일 다운로드'} <span aria-hidden="true">↓</span></button></div>
-        <div className="flow-next"><div><span className="eyebrow">DEMO</span><h3>시나리오 비교</h3></div><button onClick={onDemo}>Demo Controls →</button></div>
+        <div className="flow-actions"><button className="text-button" onClick={() => setStep(1)}>← 판단 다시 보기</button><button className="primary-button" disabled={downloading} onClick={onDownload}>{downloading ? '준비 중…' : detail.change ? '변조 전 원본 증거 다운로드' : '증거 파일 다운로드'} <span aria-hidden="true">↓</span></button></div>
         <button className="technical-toggle text-button" aria-expanded={technical} aria-controls="technical-records" onClick={() => setTechnical(value => !value)}>{technical ? '기술 증거 접기 −' : '기술 증거 자세히 보기 +'}<span>Timeline · Hash · Signature · Raw JSON</span></button>
         {technical && <div className="technical-workspace" id="technical-records"><EvidenceTimeline detail={detail} selected={evidence} onSelect={setEvidence} /><EvidenceDetail detail={detail} selected={evidence} mock={mock} /></div>}
       </>}

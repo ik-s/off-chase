@@ -48,7 +48,7 @@ function makeReport(status: VerificationStatus, amount = '4500000000', limit = '
   return { status, errors: [...new Set(checks.flatMap(c => c.error ? [c.error] : []))], checks };
 }
 
-function makeCase(id: string, kind: DemoScenario | 'invalid', offset: number, pending = false): CaseDetail {
+function makeCase(id: string, kind: DemoScenario | 'invalid' | 'deleted', offset: number, pending = false): CaseDetail {
   const observed = origin + offset;
   const missing = kind === 'missing';
   // Keep the normal rejection fixed. Tamper/missing demos start within the limit.
@@ -85,7 +85,7 @@ function makeCase(id: string, kind: DemoScenario | 'invalid', offset: number, pe
   return {
     bundle,
     report: makeReport(missing ? pending ? 'PROCESSING' : 'MISSING' : kind === 'tampered' ? 'TAMPERED' : kind === 'invalid' ? 'INVALID' : 'VERIFIED', amount),
-    label: { normal: '정상 거절', tampered: '승인 기록을 거절로 변조', missing: '한도 이내 요청 · 응답 대기 / 누락', deleted: '거절 기록 삭제 · 보관 증거 유지', invalid: '요청자 확인 실패 · 응답 미검증' }[kind],
+    label: { normal: '정상 거절', unknown: '알 수 없는 거절', tampered: '승인 기록을 거절로 변조', missing: '한도 이내 요청 · 응답 대기 / 누락', deleted: '거절 기록 삭제 · 보관 증거 유지', invalid: '요청자 확인 실패 · 응답 미검증' }[kind],
     institutionRecordPresent: !missing && kind !== 'deleted',
     chainTime: observed + (pending ? 5 : 31),
     requestAnchor: { hash: hash('4'), policyHash: hash('2'), timestamp: observed, block: 12345678 + offset },

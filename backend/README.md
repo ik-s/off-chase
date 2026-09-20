@@ -1,5 +1,9 @@
 # Off-Chase backend MVP
 
+## Current integration runtime
+
+The `develop` runtime now requires Supabase and provides live case/progress APIs. Setup, migration order, scenarios and recovery limitations are in [INTEGRATION.md](INTEGRATION.md). The earlier in-memory runtime notes below describe the initial implementation and are superseded by this integration guide. `npm start` never falls back to in-memory storage. `scripts/local-preview.ts` is an explicit disposable local-chain browser-test harness only.
+
 This branch follows `AGENTS/DEVELOPMENT_FINAL.md` from the current remote `main`. The Python POC on `backend-poc-python` is separate from this implementation.
 
 Implemented: strict transport records matching the frontend's Evidence Bundle schema; canonical JSON → Keccak record hashes; EVM raw-hash signatures; mock enterprise, agent and institution roles; a gateway-signed receipt; an Ownable request/decision anchor with a 30-second chain deadline; a mandatory Gateway service for request/decision processing and idempotency; a read-only verifier that checks signatures, policy, links, anchor state and actual transaction events. The verifier requires only a Bundle, static public key registry and blockchain reader.

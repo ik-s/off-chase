@@ -1,78 +1,47 @@
 # Off-Chase Frontend
 
-React + Vite + TypeScript, ordinary CSS, React hooks, and Zod. Node 24.13+ is required for the dependency-free TypeScript test runner.
+React + Vite + TypeScript, ordinary CSS, React hooks and Zod. Node 24.13+ is required for the TypeScript test runner.
 
 ## Run
 
-From `frontend/`:
+Start the configured backend on port 3000, then run these commands from `frontend/`:
 
 ```sh
 npm ci
 npm run dev
-npm run typecheck
 npm test
 npm run build
 ```
 
-The app opens on an Off-Chase service introduction. Select “요청 선택하고 시작하기”, then explicitly choose a request. No case is selected or loaded automatically. `REQ-001` is one available example: 4,500 USDC → 4,000 USDC limit → REJECT / LIMIT_EXCEEDED → VERIFIED.
+Vite proxies `/api` to `http://127.0.0.1:3000`. The app injects `createHttpRepository()`; API failures never fall back to mock data. See [backend setup](../backend/INTEGRATION.md) for Supabase migrations and server-only credentials.
 
-## Guided experience
+## Case review
 
-The original landing, request picker and step-by-step card layout are restored. Copy is shortened to record-oriented headings (`REQ-001 · Request / Decision / Evidence`), concise field labels and actions. The landing retains its headline and emblem with a single description; workflow captions remain without explanatory paragraphs. Typography, timestamps and disclosure behavior are unchanged.
+Header → **테스트 요청 +** opens a single amount field and send button. The browser converts USDC to exact base units; the server signs an Agent request and lets the configured MVP institution evaluate the policy. Processing stages remain visible during polling, and **요청·응답 비교하기** opens the resulting case. No scenario selector or browser signing keys are involved. Requests require the local backend's `ENABLE_DEMOS=true` flag and consume test ETH for anchoring, not USDC.
 
-The interface follows service introduction → request picker → the progressive review below. The Off-Chase logo in the header returns to the introduction; the same original SVG is used as the favicon. Body text and primary actions are approximately 20px, with 14–16px supporting text and responsive adjustments.
+The introduction leads to explicit case selection, then Request → Decision → Evidence. No case is automatically selected. Case numbers such as `REQ-001` are persisted database metadata, stable across filters and reloads. The signed original request ID remains unchanged and is available in technical details and exported JSON. The list remains newest-first.
 
-1. **요청 확인**: compare the request amount and policy limit; one primary action opens the institution's decision.
-2. **판단 이해**: read the recorded decision and reason; explicitly start evidence verification.
-3. **증거 검증**: see the request amount, policy limit, recorded institution response and reason together. Three expandable evidence sections cover the AI Agent request (including the signed receipt), enterprise policy, and institution response. Each reveals the related original signatures/hashes and plain-language check results; there is no separate flat list of all checks. Tampered and invalid records are explicitly presented as untrusted claims, and absent responses do not invent signatures or hashes. Timeline and Raw JSON remain optional technical disclosures.
+The evidence screen compares the Agent request, applied policy and institution response. Three expandable sections expose actual verification checks. Long IDs, addresses, signatures and hashes are shortened visually; copy buttons copy the full original value. If clipboard access fails, a selectable full-value field appears. Sepolia request/response transactions and the contract are linked directly. Raw JSON remains collapsed by default.
 
-Downloads and additional scenarios appear after verification. Case selection and file verification have separate focused views. Opening and returning from a secondary view preserves progress; choosing a different case or creating a new demo starts at step 1. Filtering the case picker does not select a case until the user clicks one. Later steps unlock as the user progresses, and keyboard focus follows the current heading.
+Request processing stages show server observation times; anchor details show block times. PROCESSING is based on chain time, not the browser clock. Demo controls and scenario navigation are removed from the product UI; the old scenario creation endpoint is removed. Scenario fixtures remain available to local-chain tests only.
 
-`GuidedCase.tsx` owns presentation-only step state. Verification still goes through `useWorkspace` and the injected repository. A PROCESSING result is explicitly a verification-time snapshot; use “검증 결과 다시 확인” after the simulated deadline to retrieve the updated result.
+## Data boundaries
 
-## Boundaries
+The optional **한도 미만 요청 거절 + 정책 변경** checkbox runs a 4,000 → 5,000 USDC policy-copy tampering case. It requires a request below 4,000 USDC: the institution signs REJECT/KYT_RISK despite satisfying the amount limit, then presents a changed policy copy. Original policy, request, rejection and anchors remain intact. The original bundle verifies; the changed copy is TAMPERED. The larger policy limit does not justify the rejection.
 
-- This is a **Frontend mock demo**, not a cryptographic verifier. Signatures, hashes, transactions and contract addresses are non-cryptographic placeholders. No private keys, Backend, database, wallet, RPC, or Smart Contract implementation is included.
-- `src/data/records.ts` mirrors the four DEVELOPMENT records and Evidence Bundle. UI metadata is kept separately in `src/data/types.ts`.
-- Amounts stay in base-unit integer strings. Formatting uses BigInt without floating-point conversion.
-- All component data comes through `EvidenceRepository`, injected in `src/main.tsx`. The Mock adapter is session-local and async. Reloading resets it.
-- CSS tokens and shared status components follow DESIGN.md. No UI, router, or state management library is installed.
-
-## Demo and file behavior
-
-The initial cases cover all five statuses. Demo Controls add independent cases for Normal, Decision Tampered, Decision Missing, and Institution DB Deleted.
-
-At the user's request, the Frontend tamper demo now differs from the original DEVELOPMENT example: a 3,500 USDC request against a 4,000 USDC limit had an APPROVE outcome, then the displayed institution record was changed to REJECT / KYT_RISK. The saved approval anchor remains fixed; the before/after description is Mock metadata, not a reconstructed on-chain record. This distinguishes changed judgment from merely changing one rejection reason. KYT correctness is outside the verifier's scope.
-
-Pending/missing demos also use 3,500 USDC: being within the limit does not fabricate an institution response. Normal and deleted-DB demos retain 4,500 / 4,000 and REJECT / LIMIT_EXCEEDED; deletion preserves evidence of that legitimate rejection. INVALID is an untrusted submitted bundle with an unregistered requester key; dependent checks are not run, rather than claiming its receipt/anchors were verified. Transport record schemas are unchanged.
-
-Missing advances **simulated chain time** from a fixed fixture timestamp using elapsed monotonic ticks inside the Mock adapter. It starts 5 seconds after request observation; it stays PROCESSING at the 30-second deadline and becomes MISSING on the following tick (about 26 seconds after running the demo). No PC wall-clock date determines missing status. Real integration must use returned chain time/status instead.
-
-Deleted DB cases keep the previously captured bundle and anchor metadata separate from institution record availability. They do not claim to prove a deletion action.
-
-Download exports only the Evidence Bundle. Upload supports JSON files up to 2 MB. Zod checks shape, then the adapter recognizes exact session fixtures (ignoring object key order). Only recognized fixtures receive simulated results. Unknown, modified, or previous-session demo files require a real Verifier; they are never automatically marked VERIFIED. Invalid JSON is a file error; structurally invalid bundles produce INVALID_EVIDENCE_SCHEMA. No hash or signature verification is performed.
-
-## Future API integration
-
-Implement `EvidenceRepository` and replace its injection in `src/main.tsx`; do not import transport or fixtures in components.
-
-Documented routes:
-
-- Evidence download: `GET /api/requests/:requestId/evidence`
-- Verification: `POST /api/verifier`
-- Request ingress: `POST /api/requests` requires an already signed Request; Frontend must not create signatures.
-- No direct UI call to `POST /api/decisions`.
-
-Case list/detail, request-demo triggering, attack-demo endpoints, and the detailed verification response still need Backend contracts. The repository methods are **internal interfaces, not invented HTTP routes**. The eventual adapter must map API checks, errors, chain time and anchor metadata to view models. No automatic fallback to Mock is allowed.
-
-The document does not specify the absent-decision encoding of `anchors.decision_tx`: this Frontend accepts omitted or null and its missing fixtures omit it. Confirm the final wire encoding during API integration. Record field names and other Bundle fields are unchanged.
+- Components use `EvidenceRepository`; credentials, signing and RPC access remain server-side.
+- Record schemas mirror DEVELOPMENT. Display metadata is separate from signed records.
+- Amounts remain base-unit integer strings and are formatted with BigInt.
+- No USDC is transferred by this review flow. On-chain anchoring uses test ETH gas.
+- VERIFIED means evidence integrity, not approval or proof that KYT risk was justified.
+- Downloads preserve the original Evidence Bundle, including original IDs and signatures. Policy-tampering cases explicitly label the original download.
+- JSON uploads (up to 2 MB) are sent to the real verifier. Transport errors are not INVALID evidence.
+- Legacy mock adapters and fixtures remain for isolated tests and are not injected in the running app.
 
 ## Verification
 
-`npm test` covers base-unit precision, exact fixture round trips, unknown/invalid input, all statuses, deadline boundaries, retained evidence after deletion, mutation isolation, filter selection, stale responses, and the replaceable repository boundary. `npm run build` includes strict type checking.
+`npm test` checks amount precision, repository contracts, input handling, selection state and legacy fixture logic. `npm run build` includes strict type checking. Backend tests cover real local-chain signatures, anchoring, four scenarios and stable case numbering.
 
-Browser checks cover step-by-step progression, deferred tools, preserved progress, explicit Case selection, optional Timeline/technical data, demos, file upload, keyboard focus and desktop/narrow layouts. Build output is static and can be served with `npm run preview`.
+Browser verification covers explicit selection, guided steps, actual evidence re-verification, short case labels, disclosure alignment, clipboard feedback, Explorer links and removal of demo navigation.
 
-Sample upload files live in `tests/fixtures/`: `normal.json` reproduces the initial VERIFIED fixture, `unknown.json` is structurally valid but unsupported, and `malformed.json` tests invalid JSON feedback.
-
-See [VERIFICATION.md](./VERIFICATION.md) for completed checks and the in-app browser download limitation.
+The case list contains only REJECT records. Direct test requests always generate rejection cases: above the policy limit → LIMIT_EXCEEDED; at or below the limit → KYT_RISK. There is no random approval branch. KYT_RISK is a test scenario, not a risk assessment. Labels reflect the signed reason. General record schemas still accept APPROVE for verification compatibility.

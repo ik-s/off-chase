@@ -91,6 +91,23 @@ it('recovers an already anchored decision after the deadline without rebroadcast
   assert.equal(recovered.anchors.decision_tx, anchored.decisionTx);
 });
 
+it('recovers an anchored request after receipt persistence failed without rebroadcasting', async () => {
+  const { gateway, store, request, reader } = await setup();
+  const save = store.saveBundle.bind(store);
+  let fail = true;
+  store.saveBundle = async bundle => {
+    if (fail) { fail = false; throw new Error('SIMULATED_STORAGE_FAILURE'); }
+    await save(bundle);
+  };
+  await assert.rejects(gateway.submitRequest(request, { omitDecision: true }), /SIMULATED_STORAGE_FAILURE/);
+  const before = await reader.readRecord(request.request_id);
+  assert.ok(before.requestHash);
+  const recovered = await gateway.submitRequest(request, { omitDecision: true });
+  assert.equal(recovered.verification_receipt.observed_at, before.requestAnchoredAt);
+  assert.equal((await verifyEvidence(recovered, registry, reader)).status, 'PROCESSING');
+  assert.deepEqual(await reader.readRecord(request.request_id), before);
+});
+
 it('downloaded evidence stays verifiable after the institution decision row is deleted', async () => {
   const { gateway, store, reader, request } = await setup();
   const downloaded = structuredClone(await gateway.submitRequest(request));

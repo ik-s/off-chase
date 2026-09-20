@@ -3,7 +3,8 @@ import { createPublicClient, createWalletClient, defineChain, http, parseAbi, ty
 import { privateKeyToAccount } from 'viem/accounts';
 import { z } from 'zod';
 import { AnchorClient } from '../blockchain/anchorClient.ts';
-import { InMemoryEvidenceStore } from '../db/memoryEvidenceStore.ts';
+import { createSupabaseEvidenceStoreFromEnv } from '../persistence/supabaseEvidenceStore.ts';
+import { CaseService } from './cases.ts';
 import { createPolicy } from '../enterprise/policy.ts';
 import type { KeyRegistry } from '../institution/mockWallet.ts';
 import { GatewayService } from '../verification/service.ts';
@@ -40,12 +41,16 @@ export async function createRuntimeApp(env: NodeJS.ProcessEnv = process.env) {
   if (!bytecode || bytecode === '0x') throw new Error('ANCHOR_CONTRACT_NOT_DEPLOYED');
   const owner = await publicClient.readContract({ address: config.contractAddress, abi: parseAbi(['function owner() view returns (address)']), functionName: 'owner' });
   if (owner.toLowerCase() !== writerAccount.address.toLowerCase()) throw new Error('ANCHOR_WRITER_NOT_OWNER');
+  if (env.ENABLE_DEMOS === 'true' && await publicClient.getBalance({ address: writerAccount.address }) === 0n) throw new Error('ANCHOR_WRITER_NEEDS_TEST_ETH');
   const writer = createWalletClient({ account: writerAccount, chain, transport: http(config.rpcUrl) });
   const anchor = new AnchorClient(publicClient, writer, config.contractAddress, config.chainId);
   const policy = await createPolicy(enterprise, { policyId: 'payment-limit-v1', validFrom: '2026-09-19T00:00:00Z', maxAmountBaseUnits: '4000000000' });
-  const store = new InMemoryEvidenceStore([policy]);
+  const store = createSupabaseEvidenceStoreFromEnv(env);
+  await store.savePolicy(policy);
   const gateway = new GatewayService(anchor, store, registry, verification, institution);
-  return { app: createApiApp({ gateway, store, verify: (evidence) => verifyEvidence(evidence, registry, anchor) }), config };
+  const verify = (evidence: unknown) => verifyEvidence(evidence, registry, anchor, true);
+  const cases = new CaseService(store, gateway, anchor, verify, agent, policy, institution.address);
+  return { app: createApiApp({ gateway, store, verify, cases, demosEnabled: env.ENABLE_DEMOS === 'true' }), config };
 }
 
 async function main() {

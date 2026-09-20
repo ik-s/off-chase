@@ -16,11 +16,11 @@ export function toSummary(item: CaseDetail): CaseSummaryViewModel {
 }
 
 export function utc(seconds: number): string {
-  return new Date(seconds * 1000).toISOString().replace('T', ' ').replace('.000Z', ' UTC');
+  return new Date(seconds * 1000).toISOString().replace('T', ' ').replace(/\.\d{3}Z$/, ' UTC');
 }
 
 export const statusDescriptions = {
-  VERIFIED: '증거와 정책 판단이 일치합니다.',
+  VERIFIED: '서명과 보관 증거의 무결성을 확인했습니다. 거절의 타당성을 보증하지 않습니다.',
   PROCESSING: '요청은 관측됐으며, 아직 결정 기한 이전입니다.',
   MISSING: '결정 기한이 지났지만 Decision Anchor가 없습니다.',
   TAMPERED: '현재 Record가 과거 Anchor와 일치하지 않습니다.',

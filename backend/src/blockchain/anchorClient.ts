@@ -56,6 +56,27 @@ export class ChainAnchorReader {
     return Number(block.timestamp);
   }
 
+  async recoverRequestAnchor(requestId: string) {
+    const record = await this.readRecord(requestId);
+    if (!record.requestHash) throw new Error('REQUEST_ANCHOR_RECOVERY_FAILED');
+    // Locate the exact block by its committed timestamp; avoid unbounded log scans.
+    let low = 0n;
+    let high = await this.reader.getBlockNumber();
+    while (low < high) {
+      const mid = (low + high) / 2n;
+      const block = await this.reader.getBlock({ blockNumber: mid });
+      if (block.timestamp < BigInt(record.requestAnchoredAt)) low = mid + 1n;
+      else high = mid;
+    }
+    const logs = await this.reader.getLogs({ address: this.address, fromBlock: low, toBlock: low,
+      topics: encodeEventTopics({ abi: anchorAbi, eventName: 'RequestAnchored', args: { requestKey: requestKey(requestId) } }),
+    } as never);
+    const match = parseEventLogs({ abi: anchorAbi, eventName: 'RequestAnchored', logs }).find(log =>
+      log.args.requestKey === requestKey(requestId) && log.args.requestHash === record.requestHash && log.args.policyHash === record.policyHash);
+    if (!match?.transactionHash) throw new Error('REQUEST_ANCHOR_RECOVERY_FAILED');
+    return { requestTx: match.transactionHash, blockNumber: low, observedAt: record.requestAnchoredAt, decisionDeadline: record.decisionDeadline };
+  }
+
   async findDecisionTx(requestId: string, decisionHash: Hex, fromBlock?: bigint): Promise<Hex | null> {
     const logs = await this.reader.getLogs({
       address: this.address,
@@ -81,8 +102,9 @@ export class ChainAnchorReader {
         log.args.requestHash === input.requestHash && log.args.policyHash === input.policyHash &&
         log.args.requestAnchoredAt === BigInt(input.observedAt) &&
         log.args.decisionDeadline === BigInt(input.decisionDeadline));
-    } catch {
-      return false;
+    } catch (error) {
+      if (error instanceof Error && error.name === 'TransactionReceiptNotFoundError') return false;
+      throw error;
     }
   }
 
@@ -96,8 +118,9 @@ export class ChainAnchorReader {
       return logs.some(log => log.address.toLowerCase() === this.address.toLowerCase() &&
         log.args.requestKey === requestKey(input.requestId) &&
         log.args.decisionHash === input.decisionHash && log.args.decisionAnchoredAt === BigInt(input.anchoredAt));
-    } catch {
-      return false;
+    } catch (error) {
+      if (error instanceof Error && error.name === 'TransactionReceiptNotFoundError') return false;
+      throw error;
     }
   }
 }
