@@ -4,7 +4,8 @@ import { privateKeyToAccount } from 'viem/accounts';
 import { z } from 'zod';
 import { AnchorClient } from '../blockchain/anchorClient.ts';
 import { createSupabaseEvidenceStoreFromEnv } from '../persistence/supabaseEvidenceStore.ts';
-import { CaseService } from './cases.ts';
+import { CaseService, type CaseExecution } from './cases.ts';
+import { createRunControl } from '../persistence/runControl.ts';
 import { createPolicy } from '../enterprise/policy.ts';
 import type { KeyRegistry } from '../institution/mockWallet.ts';
 import { GatewayService } from '../verification/service.ts';
@@ -22,7 +23,7 @@ function requireRegistered(registry: KeyRegistry, keyId: string, address: Addres
   if (registry[keyId]?.toLowerCase() !== address.toLowerCase()) throw new Error(`KEY_REGISTRY_MISMATCH_${keyId}`);
 }
 
-export async function createRuntimeApp(env: NodeJS.ProcessEnv = process.env) {
+export async function createRuntimeApp(env: NodeJS.ProcessEnv = process.env, execution: CaseExecution = {}) {
   const config = runtimeConfig(env);
   const chain = defineChain({ id: config.chainId, name: 'Trust404 configured chain', nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 }, rpcUrls: { default: { http: [config.rpcUrl] } } });
   const publicClient = createPublicClient({ chain, transport: http(config.rpcUrl) });
@@ -32,7 +33,9 @@ export async function createRuntimeApp(env: NodeJS.ProcessEnv = process.env) {
   const verification = privateKeyToAccount(config.verificationPrivateKey);
   const institution = privateKeyToAccount(config.institutionPrivateKey);
   const writerAccount = privateKeyToAccount(config.anchorWriterPrivateKey);
-  const registry = await loadRegistry(config.keyRegistryPath);
+  const registry = env.KEY_REGISTRY_JSON
+    ? RegistrySchema.parse(JSON.parse(env.KEY_REGISTRY_JSON)) as KeyRegistry
+    : await loadRegistry(config.keyRegistryPath);
   requireRegistered(registry, 'enterprise-key-1', enterprise.address);
   requireRegistered(registry, 'agent-key-1', agent.address);
   requireRegistered(registry, 'verification-key-1', verification.address);
@@ -49,8 +52,9 @@ export async function createRuntimeApp(env: NodeJS.ProcessEnv = process.env) {
   await store.savePolicy(policy);
   const gateway = new GatewayService(anchor, store, registry, verification, institution);
   const verify = (evidence: unknown) => verifyEvidence(evidence, registry, anchor, true);
-  const cases = new CaseService(store, gateway, anchor, verify, agent, policy, institution.address);
-  return { app: createApiApp({ gateway, store, verify, cases, demosEnabled: env.ENABLE_DEMOS === 'true' }), config };
+  const control = createRunControl(env);
+  const cases = new CaseService(store, gateway, anchor, verify, agent, policy, institution.address, { ...execution, control });
+  return { app: createApiApp({ gateway, store, verify, cases, demosEnabled: env.ENABLE_DEMOS === 'true', publicDeployment: env.VERCEL === '1' }), config };
 }
 
 async function main() {

@@ -21,6 +21,15 @@ export interface CaseStore extends EvidenceStore {
   saveRun(run: Run): Promise<void>;
   getRun(id: string): Promise<Run | null>;
 }
+export interface RunControl {
+  acquire(id: string): Promise<void>;
+  release(id: string): Promise<void>;
+  isActive(id: string): Promise<boolean>;
+}
+export interface CaseExecution {
+  control?: RunControl;
+  waitUntil?: (task: Promise<void>) => void;
+}
 export const scenarioLabels: Record<Scenario, string> = { normal: '한도 초과 거절', tampered: '정책 기록 변조', unknown: '알 수 없는 거절', missing: '응답 누락' };
 export function caseLabel(bundle: EvidenceBundle, run: Run | null) {
   if (run?.scenario === 'tampered') return scenarioLabels.tampered;
@@ -41,16 +50,18 @@ export class CaseService {
   private agent: PrivateKeyAccount;
   private policy: PolicyRecord;
   private recipient: `0x${string}`;
+  private execution: CaseExecution;
   constructor(store: CaseStore, gateway: GatewayService, chain: AnchorReader,
     verify: (input: unknown) => Promise<VerificationReport>, agent: PrivateKeyAccount,
-    policy: PolicyRecord, recipient: `0x${string}`) {
+    policy: PolicyRecord, recipient: `0x${string}`, execution: CaseExecution = {}) {
     this.store = store; this.gateway = gateway; this.chain = chain; this.verify = verify;
     this.agent = agent; this.policy = policy; this.recipient = recipient;
+    this.execution = execution;
   }
 
   async getRun(id: string) {
     const run = await this.store.getRun(id);
-    if (run?.status === 'running' && !this.active.has(id)) {
+    if (run?.status === 'running' && !this.active.has(id) && !(await this.execution.control?.isActive(id))) {
       return { ...run, status: 'failed' as const, error: 'RUN_INTERRUPTED_CHECK_EVIDENCE' };
     }
     return run ? { ...run, decision: run.receivedDecision?.decision, reasonCode: run.receivedDecision?.reason_code } : null;
@@ -64,9 +75,13 @@ export class CaseService {
     const id = `REQ-${randomUUID()}`;
     this.active.add(id);
     const run: Run = { id, requestId: id, scenario, status: 'running', events: [], ...(testAmountBaseUnits !== undefined ? { testAmountBaseUnits } : {}) };
-    try { await this.store.saveRun(run); }
+    try {
+      await this.execution.control?.acquire(id);
+      await this.store.saveRun(run);
+    }
     catch (error) { this.active.delete(id); throw error; }
-    void this.execute(run);
+    const task = this.execute(run);
+    this.execution.waitUntil?.(task);
     return structuredClone(run);
   }
 
@@ -99,7 +114,14 @@ export class CaseService {
       run.error = error instanceof Error && /^[A-Z_]+$/.test(error.message) ? error.message : 'RUN_FAILED_CHECK_SERVER';
       // Avoid leaking provider URLs or credentials in browser errors.
       try { await this.store.saveRun(run); } catch { /* getRun reports interrupted; chain evidence remains recoverable. */ }
-    } finally { this.active.delete(run.id); }
+    } finally {
+      this.active.delete(run.id);
+      // A failed/terminated execution retains its lock until an operator checks
+      // pending chain transactions. Never expire a writer lock automatically.
+      if (run.status === 'complete') {
+        try { await this.execution.control?.release(run.id); } catch { /* fail closed */ }
+      }
+    }
   }
 
   private async displayId(id: string) {

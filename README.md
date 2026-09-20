@@ -1,5 +1,7 @@
 # TRUST404 — 검증 가능한 에이전트 결제 결정 기록
 
+평가용 배포: **https://off-chase.vercel.app** — 브라우저로 접속해 테스트 요청과 증거 검증을 사용할 수 있습니다. 배포 환경 이용에는 개인 키나 Supabase 키를 제출할 필요가 없습니다.
+
 TRUST404는 에이전트의 결제 요청과 기관의 정책 결정을 서명·온체인 앵커·증거 번들로 연결하고, 운영 DB에 의존하지 않는 검증 화면을 제공하는 해커톤 MVP입니다.
 
 - 프론트엔드: React + Vite (`frontend/`)
@@ -28,6 +30,7 @@ Supabase 서비스 롤 키, RPC API 키, 개인 키는 절대 Git이나 `VITE_*`
 2. `backend/supabase/migrations/20260920084656_demo_runs.sql`
 3. `backend/supabase/migrations/20260920105620_pending_evidence.sql`
 4. `backend/supabase/migrations/20260920112749_case_numbers.sql`
+5. `backend/supabase/migrations/20260920141145_serverless_run_control.sql`
 
 RLS가 켜져 있고 anonymous 클라이언트가 evidence 테이블을 읽거나 쓰지 못하는지 확인하세요. 서비스 롤 키는 백엔드에서만 사용합니다.
 
@@ -102,11 +105,26 @@ UI에서 테스트 요청을 하나 생성한 뒤 요청·결정·Evidence 화�
 
 ## 보안 및 운영 제한
 
-- 이 저장소의 실행 런타임은 개발용이며 `ENABLE_DEMOS=true` 상태로 외부에 공개하면 안 됩니다.
+- Vercel 데모는 DB 잠금으로 쓰기를 직렬화하며 기본 하루 30건의 테스트 요청만 허용합니다. `DEMO_DAILY_LIMIT`은 1~100 범위입니다.
 - 개인 키와 Supabase 서비스 롤 키는 로컬 비밀 저장소 또는 CI secret에만 보관합니다.
 - API를 외부에 노출하려면 동일 출처 프록시, 인증·인가, TLS, 키 회전과 운영 모니터링을 별도로 구현해야 합니다.
-- 실행 중 하나의 Gateway 프로세스만 같은 Anchor Writer를 사용해야 합니다. 병렬 프로세스는 nonce 충돌을 유발할 수 있습니다.
+- 같은 Anchor Writer로 별도 로컬 서버나 스크립트를 동시에 실행하지 마세요. 직접 Gateway 쓰기 API는 Vercel에서 비활성화됩니다.
 - Sepolia는 테스트넷이며 실제 자산·개인정보·실사용 지갑을 사용하지 않습니다.
+
+## Vercel 배포
+
+저장소 루트를 프로젝트 루트로 선택합니다. `vercel.json`이 프론트 빌드와 `/api` Function을 구성합니다. Node.js 24.x를 사용합니다.
+
+Vercel의 서버 환경변수에 위 백엔드 설정을 등록하고, `KEY_REGISTRY_PATH` 대신 공개 주소 레지스트리 JSON 전체를 `KEY_REGISTRY_JSON`으로 등록합니다. 비밀값은 Sensitive로 등록하며 `.env` 파일을 업로드하지 않습니다. 테스트 요청은 `ENABLE_DEMOS=true`로 활성화합니다.
+
+```sh
+npx vercel link
+npx vercel --prod
+```
+
+배포 후 `/api/health`와 사례 조회, 테스트 요청 진행 및 원본 증거 재검증을 확인합니다. `waitUntil`이 응답 이후 체인 작업을 유지하지만 Function 실행 한도는 300초이며 영구 작업 큐는 아닙니다. 실패 또는 강제 종료 시 DB 쓰기 잠금은 자동 해제하지 않습니다. 운영자는 `demo_writer_control.run_id`의 실행 기록과 pending 트랜잭션을 확인하고 이전 실행이 종료된 뒤 `release_demo_writer(run_id)`를 호출해 복구합니다. 정상 완료는 자동 해제됩니다. 체인의 30초 결정 기한은 변경하지 않습니다.
+
+루트 `compose.yaml`과 Python `src/trust404`는 이전 POC이며 현재 웹 앱의 API가 아닙니다.
 
 ## 추가 문서
 

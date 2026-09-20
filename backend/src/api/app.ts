@@ -14,6 +14,7 @@ export interface ApiDependencies {
   verify(evidence: unknown): Promise<VerificationReport>;
   cases?: CaseService;
   demosEnabled?: boolean;
+  publicDeployment?: boolean;
 }
 
 const requestEnvelope = z.strictObject({ request: z.unknown() });
@@ -43,6 +44,12 @@ export function createApiApp(dependencies: ApiDependencies) {
   const app = express();
   app.disable('x-powered-by');
   app.use(express.json({ limit: '3mb' }));
+  app.get('/api/health', (_request, response) => { response.json({ status: 'ok' }); });
+  // Public deployments expose only the bounded test-request writer path.
+  app.use((request, response, next) => {
+    response.setHeader('Cache-Control', 'no-store');
+    next();
+  });
 
   if (dependencies.cases) {
     const cases = dependencies.cases;
@@ -70,12 +77,14 @@ export function createApiApp(dependencies: ApiDependencies) {
   }
 
   app.post('/api/requests', domainError(async (request, response) => {
+    if (dependencies.publicDeployment) { response.status(403).json({ error: 'DIRECT_WRITES_DISABLED' }); return; }
     const { request: record } = requestEnvelope.parse(request.body);
     const bundle = await dependencies.gateway.submitRequest(record);
     response.status(201).json(bundle);
   }));
 
   app.post('/api/decisions', domainError(async (request, response) => {
+    if (dependencies.publicDeployment) { response.status(403).json({ error: 'DIRECT_WRITES_DISABLED' }); return; }
     const { decision } = decisionEnvelope.parse(request.body);
     const bundle = await dependencies.gateway.submitDecision(decision);
     response.status(201).json(bundle);

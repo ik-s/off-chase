@@ -1,5 +1,7 @@
 # Live evidence integration
 
+For Vercel deployment, use the repository root [README](../README.md#vercel-배포). Apply `20260920141145_serverless_run_control.sql` after the migrations listed below. Runtime now uses a shared database writer lock and daily request budget; failed runs keep the lock for manual chain inspection. Vercel retains background work with `waitUntil`, uses `KEY_REGISTRY_JSON`, and disables direct `/api/requests` and `/api/decisions` writes. The process-local concurrency/recovery notes below describe the earlier runtime.
+
 The frontend now uses `/api` only. No runtime fixture fallback is provided. The local Gateway uses Supabase for persistence and the configured chain for actual signatures/anchors; the agent and institution remain MVP participants, not external financial providers. No token transfer is executed.
 
 ## Prepare

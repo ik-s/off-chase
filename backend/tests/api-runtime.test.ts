@@ -11,6 +11,20 @@ const bundle = {
   anchors: {},
 } as EvidenceBundle;
 
+test('public deployment blocks direct writer endpoints including case and trailing slash variants', async () => {
+  let writes = 0;
+  await withServer(app({ publicDeployment: true, gateway: {
+    submitRequest: async () => { writes++; return bundle; },
+    submitDecision: async () => { writes++; return bundle; },
+  } }), async url => {
+    for (const path of ['/api/requests', '/API/REQUESTS/', '/api/decisions', '/API/DECISIONS/']) {
+      assert.equal((await fetch(url + path, { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' })).status, 403);
+    }
+    assert.equal(writes, 0);
+    assert.equal((await fetch(url + '/api/health')).status, 200);
+  });
+});
+
 async function withServer<T>(app: ReturnType<typeof createApiApp>, run: (url: string) => Promise<T>): Promise<T> {
   const server = createServer(app);
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));

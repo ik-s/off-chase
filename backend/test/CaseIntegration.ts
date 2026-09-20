@@ -24,7 +24,16 @@ it('real local-chain API runs normal, policy tampering, KYT and missing with dur
   const store = new InMemoryEvidenceStore([policy]);
   const gateway = new GatewayService(anchor, store, registry, verification, institution);
   const verify = (input: unknown) => verifyEvidence(input, registry, anchor, true);
-  const cases = new CaseService(store, gateway, anchor, verify, agent, policy, institution.address);
+  let activeRun: string | undefined;
+  const tasks: Promise<void>[] = [];
+  const control = {
+    async acquire(id: string) { if (activeRun) throw new Error('DEMO_RUN_IN_PROGRESS'); activeRun = id; },
+    async release(id: string) { if (activeRun === id) activeRun = undefined; },
+    async isActive(id: string) { return activeRun === id; },
+  };
+  const execution = { control, waitUntil: (task: Promise<void>) => { tasks.push(task); } };
+  const cases = new CaseService(store, gateway, anchor, verify, agent, policy, institution.address, execution);
+  const otherInstance = new CaseService(store, gateway, anchor, verify, agent, policy, institution.address, execution);
   const server = createServer(createApiApp({ store, gateway, verify, cases, demosEnabled: true }));
   await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
   const address = server.address();
@@ -34,6 +43,9 @@ it('real local-chain API runs normal, policy tampering, KYT and missing with dur
   try {
     for (const scenario of ['normal', 'tampered', 'unknown', 'missing'] as Scenario[]) {
       const initial = await cases.start(scenario);
+      assert.ok(tasks.length > 0, 'background work is registered with the serverless lifetime');
+      assert.equal((await otherInstance.getRun(initial.id))?.status, 'running');
+      await assert.rejects(otherInstance.start('normal'), /DEMO_RUN_IN_PROGRESS/);
       ids.push(initial.id);
       let run = await cases.getRun(initial.id);
       for (let n = 0; run?.status === 'running' && n < 200; n++) {
@@ -41,6 +53,8 @@ it('real local-chain API runs normal, policy tampering, KYT and missing with dur
         run = await cases.getRun(initial.id);
       }
       assert.equal(run?.status, 'complete', JSON.stringify(run));
+      await tasks[tasks.length - 1];
+      assert.equal(activeRun, undefined);
       assert.deepEqual(run!.events.slice(0, 5).map(e => e.stage), ['agent_signed', 'gateway_received', 'request_validated', 'request_anchored', 'receipt_saved']);
       const detail = await cases.detail(initial.id);
       assert.ok(detail);
