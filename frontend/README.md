@@ -24,7 +24,7 @@ The interface follows service introduction → request picker → the progressiv
 
 1. **요청 확인**: compare the request amount and policy limit; one primary action opens the institution's decision.
 2. **판단 이해**: read the recorded decision and reason; explicitly start evidence verification.
-3. **증거 검증**: see the returned status and four human-readable groups of checks. Full checks, Timeline, Record details, hashes and JSON are optional disclosures.
+3. **증거 검증**: see the request amount, policy limit, recorded institution response and reason together. Three expandable evidence sections cover the AI Agent request (including the signed receipt), enterprise policy, and institution response. Each reveals the related original signatures/hashes and plain-language check results; there is no separate flat list of all checks. Tampered and invalid records are explicitly presented as untrusted claims, and absent responses do not invent signatures or hashes. Timeline and Raw JSON remain optional technical disclosures.
 
 Downloads and additional scenarios appear after verification. Case selection and file verification have separate focused views. Opening and returning from a secondary view preserves progress; choosing a different case or creating a new demo starts at step 1. Filtering the case picker does not select a case until the user clicks one. Later steps unlock as the user progresses, and keyboard focus follows the current heading.
 
@@ -41,6 +41,10 @@ Downloads and additional scenarios appear after verification. Case selection and
 ## Demo and file behavior
 
 The initial cases cover all five statuses. Demo Controls add independent cases for Normal, Decision Tampered, Decision Missing, and Institution DB Deleted.
+
+At the user's request, the Frontend tamper demo now differs from the original DEVELOPMENT example: a 3,500 USDC request against a 4,000 USDC limit had an APPROVE outcome, then the displayed institution record was changed to REJECT / KYT_RISK. The saved approval anchor remains fixed; the before/after description is Mock metadata, not a reconstructed on-chain record. This distinguishes changed judgment from merely changing one rejection reason. KYT correctness is outside the verifier's scope.
+
+Pending/missing demos also use 3,500 USDC: being within the limit does not fabricate an institution response. Normal and deleted-DB demos retain 4,500 / 4,000 and REJECT / LIMIT_EXCEEDED; deletion preserves evidence of that legitimate rejection. INVALID is an untrusted submitted bundle with an unregistered requester key; dependent checks are not run, rather than claiming its receipt/anchors were verified. Transport record schemas are unchanged.
 
 Missing advances **simulated chain time** from a fixed fixture timestamp using elapsed monotonic ticks inside the Mock adapter. It starts 5 seconds after request observation; it stays PROCESSING at the 30-second deadline and becomes MISSING on the following tick (about 26 seconds after running the demo). No PC wall-clock date determines missing status. Real integration must use returned chain time/status instead.
 

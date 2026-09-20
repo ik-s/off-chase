@@ -77,13 +77,19 @@ test('unknown or edited evidence never receives a simulated success', async () =
   }
 });
 
-test('tampered demo retains prior anchor and exposes changed reason plus all errors', async () => {
+test('tampered demo changes an in-limit approval into a risk rejection and keeps its anchor', async () => {
   const source = repo();
-  const normal = await source.getCase('REQ-001');
+  const initialTampered = await source.getCase('REQ-002');
   const altered = await source.getCase(await source.runDemo('tampered'));
-  assert.deepEqual(altered.change, { before: 'LIMIT_EXCEEDED', after: 'KYT_RISK' });
+  assert.deepEqual(altered.change, { before: 'APPROVE · 한도 이내', after: 'REJECT / KYT_RISK' });
+  assert.equal(altered.bundle.request.amount_base_units, '3500000000');
+  assert.ok(BigInt(altered.bundle.request.amount_base_units) <= BigInt(altered.bundle.policy.max_amount_base_units));
+  assert.equal(altered.bundle.decision?.decision, 'REJECT');
+  assert.equal(altered.bundle.decision?.reason_code, 'KYT_RISK');
   assert.equal(altered.report.status, 'TAMPERED');
-  assert.equal(altered.decisionAnchor?.hash, normal.decisionAnchor?.hash);
+  assert.equal(altered.decisionAnchor?.hash, initialTampered.decisionAnchor?.hash);
+  assert.equal((await source.getCase(altered.bundle.request.request_id)).decisionAnchor?.hash, altered.decisionAnchor?.hash);
+  assert.match(altered.report.checks.find(check => check.id === 'policy')!.detail, /3,500 USDC ≤ 4,000 USDC/);
   assert.ok(altered.report.errors.includes('DECISION_HASH_MISMATCH'));
   assert.ok(altered.report.errors.includes('POLICY_MISMATCH'));
   assert.equal((await source.getCase('REQ-001')).bundle.decision?.reason_code, 'LIMIT_EXCEEDED');
@@ -103,6 +109,7 @@ test('missing decision boundary uses injected mock chain time, equality is PROCE
   const missing = await source.getCase(id);
   assert.equal(missing.report.status, 'MISSING');
   assert.equal(missing.bundle.decision, null);
+  assert.ok(BigInt(missing.bundle.request.amount_base_units) <= BigInt(missing.bundle.policy.max_amount_base_units));
   assert.equal(missing.bundle.anchors.decision_tx, undefined);
   assert.equal(missing.decisionAnchor, null);
   assert.equal(EvidenceBundleSchema.safeParse(missing.bundle).success, true);
@@ -115,9 +122,20 @@ test('deleted institution row does not remove retained evidence', async () => {
   assert.equal(detail.institutionRecordPresent, false);
   assert.ok(detail.bundle.decision);
   assert.ok(detail.decisionAnchor);
+  const normal = await source.getCase('REQ-001');
+  assert.equal(detail.bundle.request.amount_base_units, normal.bundle.request.amount_base_units);
+  assert.equal(detail.bundle.decision?.decision, 'REJECT');
+  assert.equal(detail.bundle.decision?.reason_code, 'LIMIT_EXCEEDED');
   const result = await source.verifyEvidence(JSON.parse((await source.downloadEvidence(id)).content));
   assert.equal(result.kind, 'report');
   if (result.kind === 'report') assert.equal(result.report.status, 'VERIFIED');
+});
+
+test('invalid requester does not receive successful downstream verification claims', async () => {
+  const invalid = await repo().getCase('REQ-005');
+  assert.equal(invalid.report.status, 'INVALID');
+  assert.equal(invalid.report.checks.find(check => check.id === 'key')?.state, 'failed');
+  assert.ok(invalid.report.checks.filter(check => !['schema', 'key'].includes(check.id)).every(check => check.state === 'not-run'));
 });
 
 test('returned objects and separate repository sessions cannot mutate each other', async () => {

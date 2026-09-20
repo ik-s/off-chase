@@ -12,6 +12,8 @@ Latest revision restores the original guided design and removes the audit-workbe
 
 ## Automated checks
 
+Scenario-consistency revision: 15 tests and production build passed. Tests cover an in-limit 3,500/4,000 approval changed to REJECT/KYT_RISK with a retained approval anchor, in-limit missing requests without fabricated responses, preserved rejection evidence after DB deletion, and unexecuted downstream checks for an unregistered requester. Earlier references below to LIMIT_EXCEEDED → KYT_RISK describe the superseded demo.
+
 - `npm run build`: passed, including strict TypeScript checks.
 - `npm test`: 14 passed, 0 failed.
 - Policy, Request, Verification Receipt and Decision fixture field names programmatically compared against DEVELOPMENT_FINAL.md examples: all match.
@@ -58,7 +60,15 @@ The revised interface was checked in the in-app browser after the user's request
 - Desktop picker and 390px introduction, picker and verification result have no horizontal document overflow.
 - Strict TypeScript/production build and all 14 tests pass, including updated assertions for explicit selection.
 
-## Verification limitation
+## Request/response evidence review revision
+
+- Started the local Vite server and inspected the previous verification screen before editing. Replaced four static categories and the flat all-checks disclosure with a request/response summary and three native details sections.
+- Normal: 4,500 USDC request, 4,000 USDC policy, REJECT and LIMIT_EXCEEDED remain visible together. Expanding request/policy reveals their recorded signatures and hashes; keyboard Enter opens the policy section.
+- Tampered: existing LIMIT_EXCEEDED and current KYT_RISK are compared, failed checks are shown inside response evidence, and the submitted response is labelled as a claim.
+- Missing: no response/reason/signature is fabricated; deadline failure remains visible. Invalid Agent key: failed key and unexecuted signature checks are distinct.
+- Strict production build and 14 existing tests passed. No browser warnings or errors were captured during the checks. Data schemas, repositories and cryptographic behavior remain unchanged.
+
+## Download verification limitation
 
 The download button triggers the Blob download path and displays the requested filename, but the in-app browser's download event timed out and no saved file was confirmed. Actual browser file-save completion and uploading that exact saved file remain unverified. Repository-level download content and round-trip verification pass, and the equivalent checked-in normal fixture was uploaded successfully through the UI. Confirm file-save completion in a normal browser before a live demo.
 

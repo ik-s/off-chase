@@ -1,26 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
-import type { CaseDetail, EvidenceSelection, VerificationCheckViewModel, VerificationOutcome } from './data/types.ts';
+import type { CaseDetail, EvidenceSelection, VerificationOutcome } from './data/types.ts';
 import { formatUsdc, statusDescriptions, utc } from './data/presentation.ts';
-import { EvidenceTimeline, StatusBadge, VerificationChecklist } from './components.tsx';
+import { EvidenceTimeline, StatusBadge } from './components.tsx';
 import { EvidenceDetail } from './EvidenceDetail.tsx';
+import { EvidenceReview } from './EvidenceReview.tsx';
 
 const steps = ['요청 확인', '판단 확인', '증거 검증'];
-const groups = [
-  { title: '요청 출처', description: '공식 키 · 서명 · 요청 참조', ids: ['schema', 'key', 'agent-signature', 'request-hash', 'references'] },
-  { title: '적용 정책', description: '정책 서명 · Hash 연결', ids: ['policy-signature', 'policy-hash'] },
-  { title: '기관 판단', description: '기관 서명 · 정책 일치', ids: ['institution-signature', 'policy'] },
-  { title: '기록 무결성', description: 'Anchor · Hash · 결정 기한', ids: ['request-anchor', 'decision-hash', 'anchor', 'deadline'] },
-];
-
-function CheckSummary({ checks }: { checks: VerificationCheckViewModel[] }) {
-  return <ul className="flow-checks">{groups.map(group => {
-    const relevant = checks.filter(check => group.ids.includes(check.id));
-    const failed = relevant.find(check => check.state === 'failed');
-    const passed = relevant.length === group.ids.length && relevant.every(check => check.state === 'passed');
-    const state = failed ? 'failed' : passed ? 'passed' : 'pending';
-    return <li key={group.title} className={`flow-check-${state}`}><span className="flow-check-symbol" aria-hidden="true">{failed ? '!' : passed ? '✓' : '—'}</span><div><strong>{group.title}</strong><p>{failed?.detail ?? group.description}</p></div><span className="flow-check-label">{failed ? '불일치' : passed ? '확인됨' : '확인 대기'}</span></li>;
-  })}</ul>;
-}
 
 interface Props {
   detail: CaseDetail;
@@ -91,7 +76,7 @@ export function GuidedCase({ detail, mock, onVerify, onDownload, downloading, on
         <span className="field-label">INSTITUTION DECISION</span>
         <div className="decision-word">{bundle.decision?.decision ?? 'NO DECISION'}<span>{bundle.decision ? rejected ? '결제 거절' : '결제 승인' : '결정 기록 없음'}</span></div>
         <div className="decision-explanation"><h2>{bundle.decision?.reason_code === 'LIMIT_EXCEEDED' ? '1회 결제 한도 초과' : bundle.decision?.reason_code === 'KYT_RISK' ? '기록된 사유: KYT 위험' : !bundle.decision ? 'Decision Record 없음' : '기관 판단'}</h2><code>{bundle.decision?.reason_code ?? '—'}</code></div>
-        {detail.change && <div className="change-comparison"><div><span className="field-label">기존 사유</span><code>{detail.change.before}</code></div><span aria-hidden="true">→</span><div><span className="field-label">현재 사유</span><code>{detail.change.after}</code></div></div>}
+        {detail.change && <><div className="change-comparison"><div><span className="field-label">보관된 판단</span><code>{detail.change.before}</code></div><span aria-hidden="true">→</span><div><span className="field-label">현재 기록의 판단</span><code>{detail.change.after}</code></div></div><p className="context-note">한도 이내 요청에 대한 기존 승인을 거절로 바꾼 모의 사례입니다. 요청과 정책, 보관된 Anchor는 그대로입니다.</p></>}
         {!bundle.decision && <p className="context-note">결정 기한 {utc(bundle.verification_receipt.decision_deadline)} · {mock ? '모의 Chain Time' : 'Chain Time'} 기준</p>}
         {!detail.institutionRecordPresent && bundle.decision && <p className="context-note">기관 DB에는 현재 기록이 없습니다. 이 판단은 이전에 확보한 Evidence Bundle에 남아 있습니다.</p>}
       </div>
@@ -111,8 +96,7 @@ export function GuidedCase({ detail, mock, onVerify, onDownload, downloading, on
       {result?.kind === 'report' && <>
         <div className="flow-card result-focus">
           <div className="result-heading"><span className={`result-symbol text-${result.report.status.toLowerCase()}`} aria-hidden="true">{result.report.status === 'VERIFIED' ? '✓' : result.report.status === 'PROCESSING' ? '◷' : '!'}</span><div><StatusBadge status={result.report.status} /><h2>{result.report.status === 'VERIFIED' ? '증거 검증 완료' : result.report.status === 'PROCESSING' ? '결정 대기' : result.report.status === 'MISSING' ? '결정 기록 누락' : result.report.status === 'TAMPERED' ? '기록 불일치' : '유효하지 않은 증거'}</h2><p>{statusDescriptions[result.report.status]}</p></div></div>
-          <CheckSummary checks={result.report.checks} />
-          <details className="all-checks"><summary>전체 검증 항목 보기 <span>{result.report.checks.length}</span></summary><VerificationChecklist checks={result.report.checks} /></details>
+          <EvidenceReview detail={detail} report={result.report} mock={mock} />
         </div>
         {result.report.status === 'VERIFIED' && <p className="flow-result-note">{bundle.decision?.decision === 'REJECT' ? '결제는 거절됐지만, 그 판단의 증거는 검증됐습니다.' : 'VERIFIED는 실제 결제 실행이 아니라 증거의 검증 상태입니다.'}{mock && ' 이 결과는 Mock 시뮬레이션입니다.'}</p>}
         {result.report.status === 'PROCESSING' && <div className="context-note">확인 당시 결과입니다. 기한이 지난 뒤 다시 확인해 주세요.<button className="text-button" onClick={() => void verify()}>검증 결과 다시 확인 →</button></div>}

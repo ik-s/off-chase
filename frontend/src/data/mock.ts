@@ -1,6 +1,6 @@
 import { EvidenceBundleSchema } from './records.ts';
 import type { EvidenceBundle } from './records.ts';
-import { toSummary } from './presentation.ts';
+import { formatUsdc, toSummary } from './presentation.ts';
 import type { CaseDetail, DemoScenario, EvidenceRepository, EvidenceSelection, VerificationCheckViewModel, VerificationReportViewModel, VerificationStatus } from './types.ts';
 
 // Deliberately non-cryptographic fixture values. Never send these to a real chain.
@@ -17,7 +17,7 @@ function check(id: string, label: string, records: EvidenceSelection[], state: V
   return { id, label, records, state, detail, error };
 }
 
-function makeReport(status: VerificationStatus): VerificationReportViewModel {
+function makeReport(status: VerificationStatus, amount = '4500000000', limit = '4000000000'): VerificationReportViewModel {
   const absent = status === 'PROCESSING' || status === 'MISSING';
   const invalid = status === 'INVALID';
   const tampered = status === 'TAMPERED';
@@ -34,15 +34,25 @@ function makeReport(status: VerificationStatus): VerificationReportViewModel {
     check('decision-hash', 'Decision Hash Match', ['decision', 'anchors'], absent ? 'not-applicable' : tampered ? 'failed' : 'passed', absent ? 'Decision이 없어 비교하지 않습니다.' : tampered ? '변경된 Decision이 보관된 Anchor와 다릅니다.' : undefined, tampered ? 'DECISION_HASH_MISMATCH' : undefined),
     check('anchor', 'On-chain Anchor Match', ['decision', 'anchors'], absent ? 'not-applicable' : tampered ? 'failed' : 'passed', absent ? 'Decision Anchor가 없습니다.' : tampered ? '과거 Anchor는 그대로 유지되어 있습니다.' : undefined, tampered ? 'DECISION_HASH_MISMATCH' : undefined),
     check('references', 'Record References Match', ['request', 'verification_receipt', 'decision']),
-    check('policy', 'Decision Matches Policy', ['policy', 'decision'], absent ? 'not-applicable' : tampered ? 'failed' : 'passed', absent ? '판단이 없어 정책 일치 여부를 표시하지 않습니다.' : tampered ? '정책상 한도 초과 사유와 현재 사유 KYT_RISK가 다릅니다.' : '4,500 USDC > 4,000 USDC → REJECT / LIMIT_EXCEEDED', tampered ? 'POLICY_MISMATCH' : undefined),
+    check('policy', 'Decision Matches Policy', ['policy', 'decision'], absent ? 'not-applicable' : tampered ? 'failed' : 'passed', absent ? '기관 응답이 없어 정책과 판단의 일치 여부는 검사하지 않습니다.' : tampered ? `${formatUsdc(amount)} USDC ≤ ${formatUsdc(limit)} USDC: 이 데모의 한도 정책은 승인 대상이지만 현재 기록은 REJECT / KYT_RISK입니다. KYT 위험 자체는 검증하지 않습니다.` : `${formatUsdc(amount)} USDC > ${formatUsdc(limit)} USDC → REJECT / LIMIT_EXCEEDED`, tampered ? 'POLICY_MISMATCH' : undefined),
     check('deadline', absent ? 'Decision Deadline' : 'Decision Within Deadline', ['verification_receipt', 'decision', 'anchors'], status === 'MISSING' ? 'failed' : status === 'PROCESSING' ? 'not-run' : 'passed', status === 'MISSING' ? '모의 Chain Time이 기한을 초과했고 Decision Anchor가 없습니다.' : status === 'PROCESSING' ? '아직 기한 이내입니다. 결정 누락으로 판정하지 않습니다.' : '기한 내 Decision Anchor가 있는 데모입니다.', status === 'MISSING' ? 'MISSING_DECISION' : undefined),
   ];
+  if (invalid) {
+    for (const item of checks) {
+      if (item.id === 'schema' || item.id === 'key') continue;
+      item.state = 'not-run';
+      item.detail = '요청자의 공식 키를 확인하지 못했습니다. 제출된 서명·접수·응답·Anchor는 아직 신뢰할 수 없어 후속 검사를 실행하지 않았습니다.';
+      item.error = undefined;
+    }
+  }
   return { status, errors: [...new Set(checks.flatMap(c => c.error ? [c.error] : []))], checks };
 }
 
 function makeCase(id: string, kind: DemoScenario | 'invalid', offset: number, pending = false): CaseDetail {
   const observed = origin + offset;
   const missing = kind === 'missing';
+  // Keep the normal rejection fixed. Tamper/missing demos start within the limit.
+  const amount = kind === 'tampered' || missing ? '3500000000' : '4500000000';
   const bundle: EvidenceBundle = {
     schema_version: 1,
     policy: {
@@ -52,7 +62,7 @@ function makeCase(id: string, kind: DemoScenario | 'invalid', offset: number, pe
     },
     request: {
       schema_version: 1, request_id: id, created_at: new Date(observed * 1000).toISOString(),
-      asset: 'USDC', amount_base_units: '4500000000', recipient: `0x${'1'.repeat(40)}`,
+      asset: 'USDC', amount_base_units: amount, recipient: `0x${'1'.repeat(40)}`,
       policy_id: 'payment-limit-v1', policy_hash: hash('2'), nonce: hash('3'),
       agent_key_id: kind === 'invalid' ? 'unregistered-agent-key' : 'agent-key-1', agent_signature: signature,
     },
@@ -74,13 +84,13 @@ function makeCase(id: string, kind: DemoScenario | 'invalid', offset: number, pe
   };
   return {
     bundle,
-    report: makeReport(missing ? pending ? 'PROCESSING' : 'MISSING' : kind === 'tampered' ? 'TAMPERED' : kind === 'invalid' ? 'INVALID' : 'VERIFIED'),
-    label: { normal: '정상 거절', tampered: '판단 기록 변조', missing: '결정 기록 대기 / 누락', deleted: '기관 DB 기록 없음', invalid: '공식 key 확인 실패' }[kind],
+    report: makeReport(missing ? pending ? 'PROCESSING' : 'MISSING' : kind === 'tampered' ? 'TAMPERED' : kind === 'invalid' ? 'INVALID' : 'VERIFIED', amount),
+    label: { normal: '정상 거절', tampered: '승인 기록을 거절로 변조', missing: '한도 이내 요청 · 응답 대기 / 누락', deleted: '거절 기록 삭제 · 보관 증거 유지', invalid: '요청자 확인 실패 · 응답 미검증' }[kind],
     institutionRecordPresent: !missing && kind !== 'deleted',
     chainTime: observed + (pending ? 5 : 31),
     requestAnchor: { hash: hash('4'), policyHash: hash('2'), timestamp: observed, block: 12345678 + offset },
-    decisionAnchor: missing ? null : { hash: hash('8'), timestamp: observed + 12, block: 12345679 + offset },
-    ...(kind === 'tampered' ? { change: { before: 'LIMIT_EXCEEDED', after: 'KYT_RISK' } } : {}),
+    decisionAnchor: missing ? null : { hash: hash(kind === 'tampered' ? '9' : '8'), timestamp: observed + 12, block: 12345679 + offset },
+    ...(kind === 'tampered' ? { change: { before: 'APPROVE · 한도 이내', after: 'REJECT / KYT_RISK' } } : {}),
   };
 }
 
@@ -113,7 +123,7 @@ export function createMockRepository(options: { clock?: () => number; latency?: 
     const start = starts.get(id);
     if (start !== undefined) {
       item.chainTime += Math.max(0, Math.floor(clock() - start));
-      item.report = makeReport(missingStatus(item.chainTime, item.bundle.verification_receipt.decision_deadline));
+      item.report = makeReport(missingStatus(item.chainTime, item.bundle.verification_receipt.decision_deadline), item.bundle.request.amount_base_units, item.bundle.policy.max_amount_base_units);
     }
     return item;
   };
