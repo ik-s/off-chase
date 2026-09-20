@@ -41,6 +41,12 @@ export function submittedEvidence(bundle: EvidenceBundle, run: Run | null): Evid
   return structuredClone(run?.submittedBundle ?? bundle);
 }
 
+function formatUsdc(units: string): string {
+  const value = BigInt(units);
+  const fraction = (value % 1000000n).toString().padStart(6, '0').replace(/0+$/, '');
+  return (value / 1000000n).toLocaleString('en-US') + (fraction ? `.${fraction}` : '');
+}
+
 export class CaseService {
   private active = new Set<string>();
   private store: CaseStore;
@@ -69,7 +75,10 @@ export class CaseService {
 
   async start(scenario: Scenario, testAmountBaseUnits?: string): Promise<Run> {
     if (testAmountBaseUnits !== undefined && !/^[1-9][0-9]{0,29}$/.test(testAmountBaseUnits)) throw new Error('INVALID_TEST_AMOUNT');
-    if (scenario === 'tampered' && testAmountBaseUnits !== undefined && BigInt(testAmountBaseUnits) >= BigInt(this.policy.max_amount_base_units)) throw new Error('POLICY_TAMPER_REQUIRES_BELOW_LIMIT_REQUEST');
+    if (scenario === 'tampered') {
+      const amount = BigInt(testAmountBaseUnits ?? '3500000000');
+      if (amount <= 3000000000n || amount >= BigInt(this.policy.max_amount_base_units)) throw new Error('POLICY_TAMPER_REQUIRES_BETWEEN_LIMITS_REQUEST');
+    }
     // One writer at a time avoids competing wallet nonces and preserves the deadline budget.
     if (this.active.size) throw new Error('DEMO_RUN_IN_PROGRESS');
     const id = `REQ-${randomUUID()}`;
@@ -99,12 +108,15 @@ export class CaseService {
       await progress('agent_signed');
       const bundle = await this.gateway.submitRequest(request, {
         rejectionTest: run.testAmountBaseUnits !== undefined,
-        omitDecision: run.scenario === 'missing', riskReject: run.scenario === 'unknown', progress,
+        omitDecision: run.scenario === 'missing', riskReject: run.scenario === 'unknown' || run.scenario === 'tampered', progress,
         captureDecision: async decision => { run.receivedDecision = decision; await this.store.saveRun(run); },
       });
       if (run.scenario === 'tampered') {
         run.submittedBundle = structuredClone(bundle);
-        run.submittedBundle.policy.max_amount_base_units = run.testAmountBaseUnits !== undefined ? '5000000000' : '3000000000';
+        // Keep the captured, signed response intact. Simulate the institution's
+        // later claim by altering only the submitted copy, without re-signing.
+        run.submittedBundle.policy.max_amount_base_units = '3000000000';
+        if (run.submittedBundle.decision) run.submittedBundle.decision.reason_code = 'LIMIT_EXCEEDED';
         await progress('policy_copy_altered');
       }
       run.status = 'complete';
@@ -141,7 +153,7 @@ export class CaseService {
       institutionRecordPresent: !!original.decision, chainTime, run,
       requestAnchor: { hash: anchor.requestHash ?? '', policyHash: anchor.policyHash ?? '', timestamp: anchor.requestAnchoredAt, block: bundle.verification_receipt.request_anchor_block },
       decisionAnchor: anchor.decisionHash && anchor.decisionAnchoredAt !== null ? { hash: anchor.decisionHash, timestamp: anchor.decisionAnchoredAt, block: null } : null,
-      ...(run?.scenario === 'tampered' && run.status === 'complete' ? { change: { before: '정책 한도 4,000 USDC', after: `제시된 정책 한도 ${run.testAmountBaseUnits !== undefined ? '5,000' : '3,000'} USDC` }, originalBundle: original } : {}),
+      ...(run?.scenario === 'tampered' && run.status === 'complete' ? { change: { before: `정책 한도 ${formatUsdc(original.policy.max_amount_base_units)} USDC`, after: `제시된 정책 한도 ${formatUsdc(bundle.policy.max_amount_base_units)} USDC` }, originalBundle: original } : {}),
     };
   }
 

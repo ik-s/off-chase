@@ -76,7 +76,11 @@ export function EvidenceReview({ detail, report, mock }: { detail: CaseDetail; r
       </dl>
       <p className="evidence-reason">{reason}</p>
       {decision && <span className="evidence-reason-code">{decision.reason_code}</span>}
-      {detail.change && <div className="evidence-warning"><strong>요청 당시 정책과 사후 제시된 정책이 다릅니다.</strong><p>{detail.change.before} → {detail.change.after}</p>{decision?.reason_code === 'KYT_RISK' && <p>요청 {amount} USDC는 당시 한도 {formatUsdc((detail.originalBundle ?? detail.bundle).policy.max_amount_base_units)} USDC를 충족했지만 기관이 거절했습니다. 사후에 높인 한도로도 금액 초과 거절을 설명할 수 없습니다.</p>}<p>원본 요청·기관 응답·Anchor는 보존되어 있습니다. 사후 제시된 정책의 해시가 당시 기록과 일치하지 않습니다.</p></div>}
+      {detail.change && <div className="evidence-warning"><strong>요청 당시 정책과 사후 제시된 정책이 다릅니다.</strong><p>{detail.change.before} → {detail.change.after}</p>
+        <p>요청 {amount} USDC / 요청 당시 한도 {formatUsdc((detail.originalBundle ?? detail.bundle).policy.max_amount_base_units)} USDC / 사후 제시 한도 {limit} USDC</p>
+        {detail.originalBundle && BigInt(policy.max_amount_base_units) < BigInt(detail.originalBundle.policy.max_amount_base_units) && <p>당시 한도 이내였던 요청에 더 낮은 한도를 사후 적용해 금액 초과로 거절했다고 주장하는 사례입니다. 정상적인 새 정책 발행이 아니라 과거 요청의 기록을 변경한 것입니다.</p>}
+        {detail.originalBundle?.decision && detail.originalBundle.decision.reason_code !== decision?.reason_code && <p>보관된 원본 사유 {detail.originalBundle.decision.reason_code} → 사후 제시 사유 {decision?.reason_code}. 제시된 응답의 서명·해시도 원본과 대조합니다.</p>}
+        <p>원본 요청·기관 응답·Anchor는 보존되어 있습니다. 사후 제시된 정책의 해시가 당시 기록과 일치하지 않습니다.</p></div>}
       {decision?.reason_code === 'KYT_RISK' && <p className="context-note">VERIFIED는 기관이 이 응답에 서명했고 기록이 일치한다는 뜻입니다. 구체적인 위험 근거나 거절의 타당성을 보증하지 않습니다.</p>}
       {(report.status === 'INVALID' || report.status === 'TAMPERED') && <p className="evidence-warning">위 내용은 제출된 기록의 주장입니다. 검증에 실패한 근거를 아래에서 확인하세요.</p>}
       {!decision && <p className="evidence-reason">결정 제출 기한 {utc(receipt.decision_deadline)} · {report.status === 'MISSING' ? '기한이 지났지만 결정 기록이 없습니다.' : report.status === 'PROCESSING' ? '검증 당시 아직 기한 이내입니다.' : '검증 결과를 확인하세요.'} 한도 이내 요청이어도 기관의 실제 승인 응답이 있어야 하며, 응답 없음은 거절을 뜻하지 않습니다.</p>}

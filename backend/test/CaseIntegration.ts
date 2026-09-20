@@ -83,14 +83,14 @@ it('real local-chain API runs normal, policy tampering, KYT and missing with dur
       const result = await fetch(`${url}/api/verifier`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ evidence: exported }) }).then(r => r.json()) as { status: string };
       assert.equal(result.status, scenario === 'missing' ? 'MISSING' : 'VERIFIED');
     }
-    assert.equal((await cases.list()).length, 2);
+    assert.equal((await cases.list()).length, 3);
     // A fresh service reads previous cases without inventing in-flight completion.
     const restarted = new CaseService(store, gateway, anchor, verify, agent, policy, institution.address);
-    assert.equal((await restarted.list()).length, 2);
+    assert.equal((await restarted.list()).length, 3);
     const numbered = await restarted.list();
     for (const [index, id] of ids.entries()) {
       assert.equal((await restarted.detail(id))?.displayId, `REQ-${String(index + 1).padStart(3, '0')}`);
-      assert.equal(numbered.some(item => item.id === id), index === 0 || index === 2);
+      assert.equal(numbered.some(item => item.id === id), index !== 3);
     }
     await store.saveRun({ id: 'interrupted', requestId: 'interrupted', scenario: 'normal', status: 'running', events: [] });
     assert.equal((await restarted.getRun('interrupted'))?.error, 'RUN_INTERRUPTED_CHECK_EVIDENCE');
@@ -119,8 +119,11 @@ it('real local-chain API runs normal, policy tampering, KYT and missing with dur
       assert.ok(run?.events.some(event => event.stage === 'institution_dispatched'));
       assert.ok(run?.events.some(event => event.stage === 'response_received'));
     }
-    await assert.rejects(cases.start('tampered', '4000000000'), /POLICY_TAMPER_REQUIRES_BELOW_LIMIT_REQUEST/);
-    await assert.rejects(cases.start('tampered', '4500000000'), /POLICY_TAMPER_REQUIRES_BELOW_LIMIT_REQUEST/);
+    for (const amount of ['3000000000', '4000000000', '4500000000']) {
+      const invalid = await fetch(`${url}/api/test/requests`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ amountBaseUnits: amount, policyTamper: true }) });
+      assert.equal(invalid.status, 400);
+      assert.deepEqual(await invalid.json(), { error: 'POLICY_TAMPER_REQUIRES_BETWEEN_LIMITS_REQUEST' });
+    }
     const changedResponse = await fetch(`${url}/api/test/requests`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ amountBaseUnits: '3500000000', policyTamper: true }) });
     assert.equal(changedResponse.status, 202);
     const changedRun = await changedResponse.json() as { id: string };
@@ -133,11 +136,14 @@ it('real local-chain API runs normal, policy tampering, KYT and missing with dur
     const tampered = (await cases.detail(changedRun.id))!;
     assert.equal(tampered.bundle.request.amount_base_units, '3500000000');
     assert.equal(tampered.bundle.decision?.decision, 'REJECT');
-    assert.equal(tampered.bundle.decision?.reason_code, 'KYT_RISK');
+    assert.equal(tampered.bundle.decision?.reason_code, 'LIMIT_EXCEEDED');
+    assert.equal(tampered.originalBundle?.decision?.reason_code, 'KYT_RISK');
     assert.equal(tampered.originalBundle?.policy.max_amount_base_units, '4000000000');
-    assert.equal(tampered.bundle.policy.max_amount_base_units, '5000000000');
+    assert.equal(tampered.bundle.policy.max_amount_base_units, '3000000000');
     assert.equal(tampered.report.status, 'TAMPERED');
     assert.equal(tampered.report.checks?.find(check => check.id === 'policy-anchor')?.state, 'failed');
+    assert.equal(tampered.report.checks?.find(check => check.id === 'institution-signature')?.state, 'failed');
+    assert.equal(tampered.report.checks?.find(check => check.id === 'decision-hash')?.state, 'failed');
     assert.equal((await verify(tampered.originalBundle)).status, 'VERIFIED');
     const listed = (await cases.list()).find(item => item.id === changedRun.id);
     assert.equal(listed?.label, '정책 기록 변조');

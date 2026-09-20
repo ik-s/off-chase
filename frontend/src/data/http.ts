@@ -20,7 +20,7 @@ export function createHttpRepository(base = '/api', transport: typeof fetch = fe
     const response = await transport(`${base}${path}`, { ...init, signal: init?.signal ? AbortSignal.any([init.signal, timeout]) : timeout, headers: { 'Content-Type': 'application/json', ...init?.headers } });
     let value: unknown;
     try { value = await response.json(); } catch { throw new Error('API 응답을 읽을 수 없습니다. 백엔드 연결을 확인하세요.'); }
-    if (!response.ok && typeof value === 'object' && value && 'error' in value && value.error === 'POLICY_TAMPER_REQUIRES_BELOW_LIMIT_REQUEST') throw new Error('정책 변경 사례는 요청 당시 한도(4,000 USDC)보다 낮은 금액으로 실행해 주세요.');
+    if (!response.ok && typeof value === 'object' && value && 'error' in value && value.error === 'POLICY_TAMPER_REQUIRES_BETWEEN_LIMITS_REQUEST') throw new Error('정책 변조 사례는 3,000 USDC 초과, 4,000 USDC 미만으로 실행해 주세요.');
     if (!response.ok) throw new Error(`API ${response.status}: ${typeof value === 'object' && value && 'error' in value ? String(value.error) : '요청 실패'}`);
     return value;
   };
